@@ -2,20 +2,26 @@
 
 Predict the minimum free energy structure of nucleic acids.
 
-`seqfold` is an implementation of the `Zuker, 1981` dynamic programming algorithm, that is the basis for [UNAFold](http://unafold.rna.albany.edu/?q=DINAMelt/software)/[mfold](https://www.ibridgenetwork.org/#!/profiles/1045554571442/innovations/1/), plus energy functions from `SantaLucia, 2004`.
+`seqfold` is an implementation of the `Zuker, 1981` dynamic programming algorithm, the basis for [UNAFold](http://unafold.rna.albany.edu/?q=DINAMelt/software)/[mfold](https://www.ibridgenetwork.org/#!/profiles/1045554571442/innovations/1/), plus energy functions from `SantaLucia, 2004`.
 
 ```python
-from seqfold import fold
+from seqfold import calc_dg
 
-# a triple-branch DNA structure
-fold("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC")  # -10.9
+# a bifurcated DNA structure
+calc_dg("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC")  # -12.94
+```
+
+## Installation
+
+```bash
+pip install seqfold
 ```
 
 ## Motivation
 
 Knowing about nucleic acid secondary structure is essential in synbio for selecting [primers for PCR](https://academic.oup.com/nar/article/40/15/e115/1223759), designing [oligos for MAGE](https://pubs.acs.org/doi/abs/10.1021/acssynbio.5b00219), and tuning [RBS expression rates](https://www.sciencedirect.com/science/article/pii/B9780123851208000024).
 
-While [UNAFold](http://unafold.rna.albany.edu/?q=DINAMelt/software) and [mfold](https://www.ibridgenetwork.org/#!/profiles/1045554571442/innovations/1/) are the most widely used applications for nucleic acid secondary structure prediction, they have several limitations. Those and others are noted below.
+While [UNAFold](http://unafold.rna.albany.edu/?q=DINAMelt/software) and [mfold](https://www.ibridgenetwork.org/#!/profiles/1045554571442/innovations/1/) are the most widely used applications for nucleic acid secondary structure prediction, their format and license are restrictive, particularly in a commercial environment. `seqfold` is meant to be a more open-source and accessible but minimal version of `UNAFold`/`mfold`.
 
 |              | seqfold             | mfold                                                                                  | UNAFold                                                                                          |
 | ------------ | ------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
@@ -23,9 +29,9 @@ While [UNAFold](http://unafold.rna.albany.edu/?q=DINAMelt/software) and [mfold](
 | OS           | Linux,MacOS,Windows | Linux,MacOS                                                                            | Linux,MacOS,Windows                                                                              |
 | Format       | python,CLI python   | CLI binary                                                                             | CLI binary                                                                                       |
 | Dependencies | none                | (mfold_util)                                                                           | Perl,(gnuplot,GD Library,glut/OpenGL)                                                            |
-| Graphical    | no                  | [yes](http://unafold.rna.albany.edu/?q=mfold/documentation) (output)                   | yes (output)                                                                                     |
-| Heterodimers | no                  | [yes](http://unafold.rna.albany.edu/?q=mfold/documentation)                            | yes                                                                                              |
-| Constraints  | no                  | [yes](http://unafold.rna.albany.edu/?q=mfold/constraints)                              | yes                                                                                              |
+| Graphical    | no                  | yes (output)                                                                           | yes (output)                                                                                     |
+| Heterodimers | no                  | yes                                                                                    | yes                                                                                              |
+| Constraints  | no                  | yes                                                                                    | yes                                                                                              |
 
 ## Citations
 

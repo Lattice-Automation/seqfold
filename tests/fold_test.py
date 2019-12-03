@@ -1,8 +1,12 @@
 """Test oligo functions."""
 
+from os import path
 import unittest
 
-from seqfold.fold import calc_tm, fold, _bulge, _pair, _hairpin, _internal_loop
+from seqfold.fold import calc_tm, calc_dg, _bulge, _pair, _hairpin, _internal_loop
+
+
+DIR = path.dirname(path.realpath(__file__))
 
 
 class TestOligos(unittest.TestCase):
@@ -41,13 +45,25 @@ class TestOligos(unittest.TestCase):
             "TGTCAGAAGTTTCCAAATGGCCAGCAATCAACCCATTCCATTGGGGATACAATGGTACAGTTTCGCATATTGTCGGTGAAAATGGTTCCATTAAACTCC": -9.35,
         }
 
+        # writing results to examples for comparison
+        results = {}
+
         for seq, unafold_est in unafold_dgs.items():
-            structs = fold(seq, temp=37.0)
-            calc_dg = sum([s[-1] for s in structs])
+            dg = calc_dg(seq, temp=37.0)
 
             # accepting a 25% difference
             delta = abs(0.25 * unafold_est)
-            self.assertAlmostEqual(calc_dg, unafold_est, delta=delta)
+            self.assertAlmostEqual(dg, unafold_est, delta=delta)
+
+            # save result
+            results[seq] = (dg, unafold_est)
+
+        # save results to examples
+        with open(path.join(DIR, "..", "examples", "dna.csv"), "w") as ex:
+            ex.write("seqfold,UNAFold,seq\n")
+
+            for seq, (sf, uf) in results.items():
+                ex.write(",".join([str(round(sf, 2)), str(uf), seq]) + "\n")
 
     def test_bulge(self):
         """Test delta G calc of a bulge."""

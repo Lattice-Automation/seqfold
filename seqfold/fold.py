@@ -653,10 +653,11 @@ def fold(seq: str, temp: float = 37.0) -> List[Tuple[int, int, str, float]]:
         temp: The temperature the fold takes place in, in Celcius
 
     Returns:
-        float: The lowest free energy fold possible for the sequences.
+        List[Tuple[int, int, str, float]]: A list of structures. Stacks, bulges, hairpins, etc.
+            The first two ints are the index on the left and right of the structure (the
+            closing indexes). Then a description of the structure followed by the delta delta G
+            of the structure: the added free energy change to the overall secondary structure
     """
-
-    print(f"folding {seq}...")
 
     seq = seq.upper()
     temp = temp + 273.15  # kelvin
@@ -682,16 +683,26 @@ def fold(seq: str, temp: float = 37.0) -> List[Tuple[int, int, str, float]]:
     # get the structure out of the cache
     # _debug(v_cache, w_cache)
     structs = _traceback(0, len(seq) - 1, v_cache, w_cache)
-    # structs = _trackback_energy(structs)
-
-    print(f"dg = {min_e}")
-    for struct in structs:
-        print(struct)
-
     total_e = sum(s[-1] for s in structs)
     assert abs(total_e - min_e) < 0.2, f"{total_e} != {min_e}"
 
     return structs
+
+
+def calc_dg(seq: str, temp: float) -> float:
+    """Fold the sequence and return just the delta G of the structure
+    
+    Args:
+        seq: The sequence to fold
+        temp: The temperature to fold at
+    
+    Returns:
+        float: The minimum free energy of the folded sequence
+    """
+
+    structs = fold(seq, temp)
+
+    return round(sum([s[-1] for s in structs]), 2)
 
 
 def _v(
@@ -1342,7 +1353,7 @@ def parse_args(args):
         dest="temp",
         type=float,
         metavar="FLOAT",
-        default=32.0,
+        default=37.0,
         help="temperature to fold at (Celcius)",
     )
     parser.add_argument(
@@ -1356,11 +1367,14 @@ def parse_args(args):
 
 
 def run():
-    """Entry point for console_scripts
+    """Entry point for console_scripts.
+
+    Simply fold the DNA and report the minimum free energy
     """
 
     parsed_args = parse_args(sys.argv[1:])
-    fold(parsed_args.seq, temp=parsed_args.temp)
+    dg = calc_dg(parsed_args.seq, temp=parsed_args.temp)
+    print(dg)
 
 
 if __name__ == "__main__":
