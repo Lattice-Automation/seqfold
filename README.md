@@ -4,6 +4,14 @@ Predict the minimum free energy structure of nucleic acids.
 
 `seqfold` is an implementation of the `Zuker, 1981` dynamic programming algorithm, the basis for [UNAFold](http://unafold.rna.albany.edu/?q=DINAMelt/software)/[mfold](https://www.ibridgenetwork.org/#!/profiles/1045554571442/innovations/1/), plus energy functions from `SantaLucia, 2004`.
 
+## Installation and Use
+
+```bash
+pip install seqfold
+```
+
+Python
+
 ```python
 from seqfold import calc_dg
 
@@ -11,17 +19,18 @@ from seqfold import calc_dg
 calc_dg("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC")  # -12.94
 ```
 
-## Installation
+CLI
 
 ```bash
-pip install seqfold
+$ seqfold TAGCTCAGCTGGGAGAGCGCCTGCTTTGCACGCAGGAGGT -t 32
+-6.58
 ```
 
 ## Motivation
 
-Knowing about nucleic acid secondary structure is essential in synbio for selecting [primers for PCR](https://academic.oup.com/nar/article/40/15/e115/1223759), designing [oligos for MAGE](https://pubs.acs.org/doi/abs/10.1021/acssynbio.5b00219), and tuning [RBS expression rates](https://www.sciencedirect.com/science/article/pii/B9780123851208000024).
+Knowing nucleic acid sequences' secondary structures is essential in synbio for selecting [primers for PCR](https://academic.oup.com/nar/article/40/15/e115/1223759), designing [oligos for MAGE](https://pubs.acs.org/doi/abs/10.1021/acssynbio.5b00219), and tuning [RBS expression rates](https://www.sciencedirect.com/science/article/pii/B9780123851208000024).
 
-While [UNAFold](http://unafold.rna.albany.edu/?q=DINAMelt/software) and [mfold](https://www.ibridgenetwork.org/#!/profiles/1045554571442/innovations/1/) are the most widely used applications for nucleic acid secondary structure prediction, their format and license are restrictive, particularly in a commercial environment. `seqfold` is meant to be a more open-source and accessible but minimal version of `UNAFold`/`mfold`.
+While [UNAFold](http://unafold.rna.albany.edu/?q=DINAMelt/software) and [mfold](https://www.ibridgenetwork.org/#!/profiles/1045554571442/innovations/1/) are the most widely used applications for nucleic acid secondary structure prediction, their format and license are restrictive. `seqfold` is meant to be a more open-source, but minimal, version of `UNAFold`/`mfold`.
 
 |              | seqfold             | mfold                                                                                  | UNAFold                                                                                          |
 | ------------ | ------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
