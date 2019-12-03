@@ -1,7 +1,11 @@
 """Functions for oligos' Tm and delta G"""
 
+import argparse
 import math
+import sys
 from typing import Dict, List, Tuple, Any
+
+from . import __version__
 
 
 DNA_COMPLEMENT = {"A": "T", "T": "A", "G": "C", "C": "G", "N": "N"}
@@ -1310,3 +1314,51 @@ def _debug(v_cache, w_cache):
     for i, row in enumerate(v_cache):
         print(",".join([t if t else "." for _, t, _ in row]) + "," + str(i))
 
+
+def parse_args(args):
+    """Parse command line parameters
+
+    Created and based on example from pyscaffold:
+    https://github.com/pyscaffold/pyscaffold/blob/master/src/pyscaffold/templates/skeleton.template
+    
+    Args:
+        args ([str]): List of parameters as strings
+    
+    Returns:
+        :obj:`argparse.Namespace`: command line parameters namespace
+    """
+
+    parser = argparse.ArgumentParser(
+        description="Predict minimum free energy structure of a nucleic acid sequence"
+    )
+
+    parser.add_argument(
+        "seq", dest="seq", type=str, metavar="SEQ", help="the sequence to fold",
+    )
+
+    parser.add_argument(
+        "-t",
+        "--temp",
+        dest="temp",
+        type=float,
+        metavar="FLOAT",
+        help="temperature to fold at (Celcius)",
+    )
+
+    parser.add_argument(
+        "--version", action="version", version="seqfold {ver}".format(ver=__version__)
+    )
+
+    return parser.parse_args(args)
+
+
+def run():
+    """Entry point for console_scripts
+    """
+
+    parsed_args = parse_args(sys.argv[1:])
+    fold(parsed_args.seq, temp=parsed_args.temp)
+
+
+if __name__ == "__main__":
+    run()
