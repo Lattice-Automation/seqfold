@@ -1,16 +1,13 @@
-# -*- coding: utf-8 -*-
-"""
-    Setup file for seqfold.
-    Use setup.cfg to configure your project.
-
-    This file was generated with PyScaffold 3.2.3.
-    PyScaffold helps you to put up the scaffold of your new Python project.
-    Learn more under: https://pyscaffold.org/
-"""
 import sys
 
 from pkg_resources import VersionConflict, require
-from setuptools import setup
+from setuptools import setup, find_packages
+
+with open("README.md", "r") as fh:
+    long_description = fh.read()
+
+with open("requirements.txt") as f:
+    requirements = f.read().splitlines()
 
 try:
     require("setuptools>=38.3")
@@ -18,6 +15,22 @@ except VersionConflict:
     print("Error: version of setuptools is too old (<38.3)!")
     sys.exit(1)
 
-
-if __name__ == "__main__":
-    setup(use_pyscaffold=True)
+setup(
+    name="seqfold",
+    version="0.1.0",
+    description="Predict the minimum free energy structure of nucleic acids",
+    author="JJTimmons",
+    author_email="jtimmons@latticeautomation.com",
+    license="mit",
+    packages=find_packages(exclude=["data"]),
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url="https://github.com/Lattice-Automation/seqfold",
+    install_requires=requirements,
+    classifiers=[
+        "Development Status :: 2 - Pre-Alpha",
+        "Programming Language :: Python",
+        "Topic :: Scientific/Engineering :: Bio-Informatics",
+    ],
+    entry_points={"console_scripts": ["seqfold=seqfold.fold:run"],},
+)

@@ -656,6 +656,8 @@ def fold(seq: str, temp: float = 37.0) -> List[Tuple[int, int, str, float]]:
         float: The lowest free energy fold possible for the sequences.
     """
 
+    print(f"folding {seq}...")
+
     seq = seq.upper()
     temp = temp + 273.15  # kelvin
 
@@ -682,7 +684,7 @@ def fold(seq: str, temp: float = 37.0) -> List[Tuple[int, int, str, float]]:
     structs = _traceback(0, len(seq) - 1, v_cache, w_cache)
     # structs = _trackback_energy(structs)
 
-    print(f"\nfolding {seq}: {min_e}")
+    print(f"dg = {min_e}")
     for struct in structs:
         print(struct)
 
@@ -1333,20 +1335,21 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "seq", dest="seq", type=str, metavar="SEQ", help="the sequence to fold",
+        "seq", type=str, metavar="SEQ", help="nucleic acid sequence to fold",
     )
-
     parser.add_argument(
         "-t",
-        "--temp",
         dest="temp",
         type=float,
         metavar="FLOAT",
+        default=32.0,
         help="temperature to fold at (Celcius)",
     )
-
     parser.add_argument(
-        "--version", action="version", version="seqfold {ver}".format(ver=__version__)
+        "-v",
+        "--version",
+        action="version",
+        version="seqfold {ver}".format(ver=__version__),
     )
 
     return parser.parse_args(args)

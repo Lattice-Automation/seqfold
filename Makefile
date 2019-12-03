@@ -3,4 +3,11 @@ install:
 	pip3 install . --user
 
 test:
-	python setup.py test
+	python3 -m unittest discover tests -p '*_test.py'
+
+patch: test
+	bumpversion patch
+
+minor: test
+	bumpversion minor
+
