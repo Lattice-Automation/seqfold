@@ -963,9 +963,6 @@ def _hairpin(seq: str, i: int, j: int, temp: float) -> float:
     hairpin_len = len(hairpin) - 2
     pair = hairpin[0] + hairpin[1] + "/" + hairpin[-1] + hairpin[-2]
 
-    # if pair in DNA_NN:
-    #     return math.inf
-
     if DNA_COMPLEMENT[hairpin[0]] != hairpin[-1]:
         # not known terminal pair, nothing to close "hairpin"
         raise RuntimeError()
@@ -988,10 +985,7 @@ def _hairpin(seq: str, i: int, j: int, temp: float) -> float:
         d_g += _j_s(hairpin_len, hairpin_max_len, d_g_inc, temp)
 
     # add penalty for a terminal mismatch
-    if hairpin_len > 3 and (pair in DNA_TERMINAL_MM or pair in DNA_NN):
-        # if pair in DNA_NN:
-        #     d_h, d_s = DNA_NN[pair]
-        #     d_g += _d_g(d_h, d_s, temp)
+    if hairpin_len > 3 and pair in DNA_TERMINAL_MM:
         if pair in DNA_TERMINAL_MM:
             d_h, d_s = DNA_TERMINAL_MM[pair]
             d_g += _d_g(d_h, d_s, temp)

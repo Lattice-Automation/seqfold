@@ -67,7 +67,7 @@ class TestOligos(unittest.TestCase):
 
         pairs = [
             ("CT/GA", -1.28),
-            ("GG/CC", -1.84),
+            ("GG/CC", -2.1),
             ("TC/AG", -1.3),
             ("GT/CG", -0.59),
             ("TC/GG", 0.08),
@@ -81,15 +81,14 @@ class TestOligos(unittest.TestCase):
     def test_hairpin(self):
         """Test delta G of a hairpin structure."""
 
+        # hairpin = "CCTTGG"
         seq = "ACCCCCTCCTTCCTTGGATCAAGGGGCTCAA"
         i = 11
         j = 16
         temp = 310.15
         hairpin_dg = _hairpin(seq, i, j, temp)
         # this differs from Unafold
-        self.assertAlmostEqual(hairpin_dg, 1.7, delta=1.0)
-
-        # self.assertEqual(0, _hairpin(seq, 8, 15, temp))
+        self.assertAlmostEqual(hairpin_dg, 4.3, delta=1.0)
 
         # from page 428 of SantaLucia, 2004
         # hairpin = "CGCAAG"
