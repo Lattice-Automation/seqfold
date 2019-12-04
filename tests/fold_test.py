@@ -3,6 +3,7 @@
 from os import path
 import unittest
 
+from seqfold.dna import DNA_ENERGIES
 from seqfold.fold import calc_tm, calc_dg, _bulge, _pair, _hairpin, _internal_loop
 
 
@@ -32,6 +33,13 @@ class TestOligos(unittest.TestCase):
             self.assertAlmostEqual(calc, actual, delta=3)  # within 3 deg tm difference
 
     def test_fold(self):
+        """Test fold function."""
+
+        # it should throw is a non-sense sequence is provided
+        with self.assertRaises(RuntimeError):
+            calc_dg("EASFEASFAST", 37.0)
+
+    def test_fold_dna(self):
         """Test DNA folding to find min energy secondary structure."""
 
         # unafold's estimates for free energy estimates of DNA oligos
@@ -72,7 +80,7 @@ class TestOligos(unittest.TestCase):
         pair = "CT/GA"
         seq = "ACCCCCTCCTTCCTTGGATCAAGGGGCTCAA"  # nonsense sequence
 
-        pair_dg = _bulge(pair, seq, 5, 7, "CTC", 310.15)
+        pair_dg = _bulge(pair, seq, 5, 7, "CTC", 310.15, DNA_ENERGIES)
         self.assertAlmostEqual(3.22, pair_dg, delta=0.4)
 
         # self.assertEqual(_bulge("CT/GA", seq, 5, 22, 310.15), 0.0)
@@ -90,7 +98,7 @@ class TestOligos(unittest.TestCase):
         seq = "ACCCCCTCCTTCCTTGGATCAAGGGGCTCAA"
 
         for pair, dg_actual in pairs:
-            dg_est = _pair(pair, seq, 5, 27, 310.15)
+            dg_est = _pair(pair, seq, 5, 27, 310.15, DNA_ENERGIES)
             self.assertAlmostEqual(dg_est, dg_actual, delta=0.02)
 
     def test_hairpin(self):
@@ -101,7 +109,7 @@ class TestOligos(unittest.TestCase):
         i = 11
         j = 16
         temp = 310.15
-        hairpin_dg = _hairpin(seq, i, j, temp)
+        hairpin_dg = _hairpin(seq, i, j, temp, DNA_ENERGIES)
         # this differs from Unafold
         self.assertAlmostEqual(hairpin_dg, 4.3, delta=1.0)
 
@@ -110,7 +118,7 @@ class TestOligos(unittest.TestCase):
         seq = "ACCCGCAAGCCCTCCTTCCTTGGATCAAGGGGCTCAA"
         i = 3
         j = 8
-        hairpin_dg = _hairpin(seq, i, j, temp)
+        hairpin_dg = _hairpin(seq, i, j, temp, DNA_ENERGIES)
         self.assertAlmostEqual(0.67, hairpin_dg, delta=0.1)
 
     def test_internal_loop(self):
@@ -124,6 +132,6 @@ class TestOligos(unittest.TestCase):
         temp = 310.15
         temp_est = 3.5
 
-        loop_temp = _internal_loop(seq, i, j, left, right, temp)
+        loop_temp = _internal_loop(seq, i, j, left, right, temp, DNA_ENERGIES)
 
         self.assertAlmostEqual(loop_temp, temp_est, delta=0.1)

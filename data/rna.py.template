@@ -1,0 +1,6 @@
+"""RNA enthalpy and entropy change parameters."""
+
+RNA_COMPLEMENT = {"A": "U", "U": "A", "G": "C", "C": "G", "N": "N"}
+
+RNA_MULTIBRANCH = (9.3, 0.91, -0.63)
+
