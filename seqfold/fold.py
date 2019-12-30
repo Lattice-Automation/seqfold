@@ -6,178 +6,108 @@ import sys
 from typing import Any, Dict, List, Tuple
 
 from . import __version__
-from .dna import DNA_COMPLEMENT, DNA_ENERGIES
+from .dna import DNA_ENERGIES
 from .rna import RNA_ENERGIES
-
-
-def calc_tm(seq1: str, seq2: str = "", pcr: bool = True) -> float:
-    """Calculate the annealing temperature between seq1 and seq2.
-
-    If seq2 is not provided, it's exact complement is used.
-    In otherwords, it's assumed to be an exact match. This tm
-    calculate does not account for pseudoknots or anything other
-    than an exact, unpadded alignment between seq1 and seq2.
-
-    This is largley influenced by Bio.SeqUtils.MeltingTemp with
-    some different defaults. Here, the reaction mixture is assumed to
-    be PCR and concentrations for Mg, Tris, K, and dNTPs are included
-    that match a typical PCR reaction according to Thermo and NEB. Additionally,
-    the salt correction formula from IDT's Owczarzy et al. (2008) is used.
-
-    NEB: https://www.neb.com/tools-and-resources/usage-guidelines/guidelines-for-pcr-optimization-with-taq-dna-polymerase
-    ThermoFisher: https://www.thermofisher.com/order/catalog/product/18067017?SID=srch-srp-18067017
-
-    NOTE: Sequences are assumed not to be symmetrical. Oligo not binding to self.
-
-    Args:
-        seq1: The seq whose tm is calculated
-
-    Keyword Args:
-        seq2: The seq that seq1 anneals to in 3' -> 5' direction
-        pcr: Whether tm is being calculated for the oligo is in a
-            PCR reaction mixture. If so, ion and Tris concentrations
-            that match a typical NEB/ThermoFisher PCR mixture are used
-
-    Returns:
-        float: The estimated tm as a float
-    """
-
-    if not seq2:
-        seq1 = seq1.upper()
-        seq2 = "".join([DNA_COMPLEMENT[c] for c in seq1])
-
-    if len(seq1) != len(seq2):
-        raise ValueError(
-            f"length mismatch between seq1 {len(seq1)} and seq2 {len(seq2)}"
-        )
-
-    # sum enthalpy and entropy. Enthaply is first value of each tuple and
-    # entropy is the second value of each tuple in:
-    # SantaLucia & Hicks (2004), Annu. Rev. Biophys. Biomol. Struct 33: 415-440
-
-    # start with initiation enthalpy and entropy
-    delta_h, delta_s = DNA_ENERGIES["NN"]["init"]
-
-    # add in initial A/T and initial G/Cs
-    init = seq1[0] + seq1[-1]
-    init_at = init.count("A") + init.count("T")
-    init_gc = init.count("G") + init.count("C")
-    init_at_h, init_at_s = DNA_ENERGIES["NN"]["init_A/T"]
-    init_gc_h, init_gc_s = DNA_ENERGIES["NN"]["init_G/C"]
-    delta_h += init_at * init_at_h + init_gc * init_gc_h
-    delta_s += init_at * init_at_s + init_gc * init_gc_s
-
-    # work through each nearest neighbor pair
-    for i in range(len(seq1) - 1):
-        pair1 = seq1[i] + seq1[i + 1]
-        pair2 = seq2[i] + seq2[i + 1]
-        pair = pair1 + "/" + pair2
-
-        # assuming internal neighbor pair
-        pair_delta_h, pair_delta_s = 0.0, 0.0
-        if pair in DNA_ENERGIES["NN"]:
-            pair_delta_h, pair_delta_s = DNA_ENERGIES["NN"][pair]
-        elif pair in DNA_ENERGIES["INTERNAL_MM"]:
-            pair_delta_h, pair_delta_s = DNA_ENERGIES["INTERNAL_MM"][pair]
-
-        # overwrite if it's a terminal pair
-        if i in (0, len(seq1) - 2):
-            if pair in DNA_ENERGIES["TERMINAL_MM"]:
-                pair_delta_h, pair_delta_s = DNA_ENERGIES["TERMINAL_MM"][pair]
-
-        delta_h += pair_delta_h
-        delta_s += pair_delta_s
-
-    # adjust salt based on mode
-    if pcr:
-        seq1_conc = 250.0
-        seq2_conc = 0.0
-        Na = 0
-        K = 50
-        Tris = 2  # see Thermo
-        Mg = 1.5  # see NEB
-        dNTPs = 0.2  # see NEB
-    else:
-        seq1_conc = 25.0
-        seq2_conc = 25.0
-        Na = 50
-        K = 0
-        Tris = 0
-        Mg = 0
-        dNTPs = 0
-
-    # salt correction for deltaS
-    # copied-pasted from Bio.SeqUtils' use of a decision tree by:
-    # Owczarzy et al. (2008), Biochemistry 4 7: 5336-5353
-    Mon = Na + K + Tris / 2.0  # monovalent ions
-    mg = Mg * 1e-3  # Lowercase ions (mg, mon, dntps) are molar
-    mon = Mon * 1e-3
-
-    # coefficients to a multi-variate from the paper
-    a, b, c, d, e, f, g = 3.92, -0.911, 6.26, 1.42, -48.2, 52.5, 8.31
-
-    if dNTPs > 0:
-        dntps = dNTPs * 1e-3
-        ka = 3e4  # Dissociation constant for Mg:dNTP
-        # Free Mg2+ calculation:
-        mg = (
-            -(ka * dntps - ka * mg + 1.0)
-            + math.sqrt((ka * dntps - ka * mg + 1.0) ** 2 + 4.0 * ka * mg)
-        ) / (2.0 * ka)
-    if Mon > 0:
-        R = math.sqrt(mg) / mon
-        if R < 0.22:
-            corr = (4.29 * _gc(seq1) / 100 - 3.95) * 1e-5 * math.log(
-                mon
-            ) + 9.40e-6 * math.log(mon) ** 2
-            return corr
-        elif R < 6.0:
-            a = 3.92 * (0.843 - 0.352 * math.sqrt(mon) * math.log(mon))
-            d = 1.42 * (1.279 - 4.03e-3 * math.log(mon) - 8.03e-3 * math.log(mon) ** 2)
-            g = 8.31 * (0.486 - 0.258 * math.log(mon) + 5.25e-3 * math.log(mon) ** 3)
-    corr = (
-        a
-        + b * math.log(mg)
-        + (_gc(seq1) / 100) * (c + d * math.log(mg))
-        + (1 / (2.0 * (len(seq1) - 1))) * (e + f * math.log(mg) + g * math.log(mg) ** 2)
-    ) * 1e-5
-
-    # tm with concentration consideration
-    k = (seq1_conc - (seq2_conc / 2.0)) * 1e-9
-    R = 1.9872
-    tm = (delta_h * 1000.0) / (delta_s + R * math.log(k)) - 273.15
-
-    # add in salt correction
-    tm = 1 / (1 / (tm + 273.15) + corr) - 273.15
-
-    return tm
 
 
 Cache = List[List[Any]]
 """A map from i, j tuple to a value."""
 
 
-def calc_dg(seq: str, temp: float, log_structs: bool = False) -> float:
+def run():
+    """Entry point for console_scripts.
+
+    Simply fold the DNA and report the minimum free energy
+    """
+
+    args = parse_args(sys.argv[1:])
+
+    if args.verbose:
+        dg, desc = calc_dg_verbose(args.seq, temp=args.temp)
+        print(desc)
+        print(dg)
+    else:
+        print(calc_dg(args.seq, temp=args.temp))
+
+
+def parse_args(args):
+    """Parse command line parameters
+
+    Created and based on an example from pyscaffold:
+    https://github.com/pyscaffold/pyscaffold/blob/master/src/pyscaffold/templates/skeleton.template
+
+    Args:
+        args ([str]): List of parameters as strings
+
+    Returns:
+        `argparse.Namespace`: command line parameters namespace
+    """
+
+    parser = argparse.ArgumentParser(
+        description="Predict the minimum free energy (kcal/mol) of a nucleic acid sequence"
+    )
+
+    parser.add_argument(
+        "seq", type=str, metavar="SEQ", help="nucleic acid sequence to fold",
+    )
+    parser.add_argument(
+        "-t",
+        dest="temp",
+        type=float,
+        metavar="FLOAT",
+        default=37.0,
+        help="temperature to fold at (Celcius)",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="log each structure (i,j,description,ddG)",
+    )
+    parser.add_argument(
+        "--version", action="version", version="seqfold {ver}".format(ver=__version__),
+    )
+
+    return parser.parse_args(args)
+
+
+def calc_dg(seq: str, temp: float) -> float:
     """Fold the sequence and return just the delta G of the structure
-    
+
     Args:
         seq: The sequence to fold
         temp: The temperature to fold at
 
-    Optional Args:
-        log_structs: Whether to log the structure as well
-    
     Returns:
         float: The minimum free energy of the folded sequence
     """
 
     structs = fold(seq, temp)
-
-    if log_structs:
-        for (i, j, desc, ddg) in structs:
-            print(i, j, desc, ddg)
-
     return round(sum([s[-1] for s in structs]), 2)
+
+
+def calc_dg_verbose(seq: str, temp: float) -> Tuple[float, str]:
+    """Fold the sequence and return the delta G plus a str description
+
+    Args:
+        seq: The sequence to fold
+        temp: The temperature to fold at
+
+    Returns:
+        (float, str): The dg of the folded structure and a description
+    """
+
+    structs = fold(seq, temp)
+
+    folds = ["-"] * len(seq)
+    for i, j, desc, _ in structs:
+        folds[i] = "/"
+        folds[j] = "\\"
+
+    desc_fold = "".join(folds)
+    desc = f"{desc_fold}\n{seq}"
+
+    return round(sum([s[-1] for s in structs]), 2), desc
 
 
 def fold(seq: str, temp: float = 37.0) -> List[Tuple[int, int, str, float]]:
@@ -287,15 +217,16 @@ def _v(
         for j_1 in range(i_1 + 4, j):
             pair = seq[i] + seq[i_1] + "/" + seq[j] + seq[j_1]
             pair_left = seq[i] + seq[i + 1] + "/" + seq[j] + seq[j - 1]
-            pair_right = seq[i_1 - 1] + seq[i_1] + "/" + seq[j_1 + 1] + seq[j_1]
+            pair_right = seq[i_1 - 1] + seq[i_1] + \
+                "/" + seq[j_1 + 1] + seq[j_1]
             pair_outer = pair_left in emap["NN"] or pair_right in emap["NN"]
 
             stack = i_1 == i + 1 and j_1 == j - 1 and pair in emap["NN"]
             bulge_left = i_1 > i + 1 and pair in emap["NN"]
             bulge_right = j_1 < j - 1 and pair in emap["NN"]
 
-            loop_left = seq[i : i_1 + 1]
-            loop_right = seq[j_1 : j + 1]
+            loop_left = seq[i: i_1 + 1]
+            loop_right = seq[j_1: j + 1]
 
             e2_test, e2_test_type = math.inf, ""
             if stack:
@@ -308,12 +239,14 @@ def _v(
                     e2_test_type = "STACK_DE:" + pair
             elif bulge_left and bulge_right and not pair_outer:
                 # it's an interior loop
-                e2_test = _internal_loop(seq, i, j, loop_left, loop_right, temp, emap)
+                e2_test = _internal_loop(
+                    seq, i, j, loop_left, loop_right, temp, emap)
                 e2_test_type = "INTERIOR_LOOP"
 
                 if len(loop_left) == 3 and len(loop_right) == 3:
                     # technically an interior loop of 1. really 1bp mismatch
-                    e2_test_type = "STACK:" + loop_left + "/" + loop_right[::-1]
+                    e2_test_type = "STACK:" + \
+                        loop_left + "/" + loop_right[::-1]
             elif bulge_left and not bulge_right:
                 # it's a bulge on the left side
                 e2_test = _bulge(pair, seq, i, j, loop_left, temp, emap)
@@ -342,7 +275,8 @@ def _v(
         if e3_test < e3:
             e3 = e3_test
             e3_ij = [(i + 1, i_1), (i_1 + 1, j - 1)]
-            e3_type = "BIFURCATION:" + str(unpaired) + "n/" + str(helixes) + "h"
+            e3_type = "BIFURCATION:" + \
+                str(unpaired) + "n/" + str(helixes) + "h"
 
     e = min(
         [(e1, e1_type, e1_ij), (e2, e2_type, e2_ij), (e3, e3_type, e3_ij)],
@@ -392,7 +326,8 @@ def _w(
         if w4_test < w4:
             w4 = w4_test
             w4_ij = [(i, i_1), (i_1 + 1, j)]
-            w4_type = "BIFURCATION:" + str(unpaired) + "n/" + str(helixes) + "h"
+            w4_type = "BIFURCATION:" + \
+                str(unpaired) + "n/" + str(helixes) + "h"
 
     w = min([w1, w2, w3, (w4, w4_type, w4_ij)], key=lambda x: x[0])
     w_cache[i][j] = w
@@ -433,13 +368,6 @@ def _j_s(query_len: int, known_len: int, d_g_x: float, temp: float) -> float:
 
     gas_constant = 1.9872e-3
     return d_g_x + 2.44 * gas_constant * temp * math.log(query_len / float(known_len))
-
-
-def _gc(seq: str) -> float:
-    """Return the GC ratio of a sequence."""
-
-    seq = seq.upper()
-    return float(seq.count("G") + seq.count("C")) / float(len(seq))
 
 
 def _pair(
@@ -514,7 +442,7 @@ def _hairpin(seq: str, i: int, j: int, temp: float, emap: Dict[str, Any]) -> flo
     if j - i < 4:
         return math.inf
 
-    hairpin = seq[i : j + 1]
+    hairpin = seq[i: j + 1]
     hairpin_len = len(hairpin) - 2
     pair = hairpin[0] + hairpin[1] + "/" + hairpin[-1] + hairpin[-2]
 
@@ -696,7 +624,8 @@ def _multi_branch(
     """
 
     e_left, e_ltype, e_lpairs = _w(seq, i, k, temp, v_cache, w_cache, emap)
-    e_right, e3_rtype, e_rpairs = _w(seq, k + 1, j, temp, v_cache, w_cache, emap)
+    e_right, e3_rtype, e_rpairs = _w(
+        seq, k + 1, j, temp, v_cache, w_cache, emap)
 
     # at least three multi-loops here; Fig 2A
     helixes = 3 if helix else 2
@@ -811,10 +740,10 @@ def _trackback_energy(
     structs: List[Tuple[int, int, str, float]]
 ) -> List[Tuple[int, int, str, float]]:
     """Add energy to each structure, based on how it's W(i,j) differs from the one after
-    
+
     Args:
         structs: The structures for whom energy is being calculated
-    
+
     Returns:
         List[Tuple[int, int, str, float]]: Structures in the folded DNA with energy
     """
@@ -841,7 +770,8 @@ def _debug(v_cache, w_cache):
     print(",".join([str(n) for n in range(len(w_cache))]))
     for i, row in enumerate(w_cache):
         print(
-            ",".join([str(round(r, 1)) if r is not None else "." for r, _, _ in row])
+            ",".join(
+                [str(round(r, 1)) if r is not None else "." for r, _, _ in row])
             + ","
             + str(i)
         )
@@ -850,7 +780,8 @@ def _debug(v_cache, w_cache):
     print(",".join([str(n) for n in range(len(v_cache))]))
     for i, row in enumerate(v_cache):
         print(
-            ",".join([str(round(r, 1)) if r is not None else "." for r, _, _ in row])
+            ",".join(
+                [str(round(r, 1)) if r is not None else "." for r, _, _ in row])
             + ","
             + str(i)
         )
@@ -858,12 +789,14 @@ def _debug(v_cache, w_cache):
     print("\n")
     print(",".join([str(n) for n in range(len(w_cache))]))
     for i, row in enumerate(w_cache):
-        print(",".join([str(ij).replace(", ", "-") for _, _, ij in row]) + "," + str(i))
+        print(",".join([str(ij).replace(", ", "-")
+                        for _, _, ij in row]) + "," + str(i))
 
     print("\n")
     print(",".join([str(n) for n in range(len(v_cache))]))
     for i, row in enumerate(v_cache):
-        print(",".join([str(ij).replace(", ", "-") for _, _, ij in row]) + "," + str(i))
+        print(",".join([str(ij).replace(", ", "-")
+                        for _, _, ij in row]) + "," + str(i))
 
     print("\n")
     print(",".join([str(n) for n in range(len(w_cache))]))
@@ -874,58 +807,6 @@ def _debug(v_cache, w_cache):
     print(",".join([str(n) for n in range(len(v_cache))]))
     for i, row in enumerate(v_cache):
         print(",".join([t if t else "." for _, t, _ in row]) + "," + str(i))
-
-
-def parse_args(args):
-    """Parse command line parameters
-
-    Created and based on example from pyscaffold:
-    https://github.com/pyscaffold/pyscaffold/blob/master/src/pyscaffold/templates/skeleton.template
-    
-    Args:
-        args ([str]): List of parameters as strings
-    
-    Returns:
-        :obj:`argparse.Namespace`: command line parameters namespace
-    """
-
-    parser = argparse.ArgumentParser(
-        description="Predict the minimum free energy (kcal/mol) of a nucleic acid sequence"
-    )
-
-    parser.add_argument(
-        "seq", type=str, metavar="SEQ", help="nucleic acid sequence to fold",
-    )
-    parser.add_argument(
-        "-t",
-        dest="temp",
-        type=float,
-        metavar="FLOAT",
-        default=37.0,
-        help="temperature to fold at (Celcius)",
-    )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="log each structure (i,j,description,ddG)",
-    )
-    parser.add_argument(
-        "--version", action="version", version="seqfold {ver}".format(ver=__version__),
-    )
-
-    return parser.parse_args(args)
-
-
-def run():
-    """Entry point for console_scripts.
-
-    Simply fold the DNA and report the minimum free energy
-    """
-
-    args = parse_args(sys.argv[1:])
-    dg = calc_dg(args.seq, temp=args.temp, log_structs=args.verbose)
-    print(dg)
 
 
 if __name__ == "__main__":
