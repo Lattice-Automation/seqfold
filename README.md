@@ -12,16 +12,16 @@ pip install seqfold
 
 ## Usage
 
-Python
+### Python
 
 ```python
 from seqfold import calc_dg
 
 # a bifurcated DNA structure
-calc_dg("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC")  # -12.94
+calc_dg("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC", temp = 37.0)  # -12.94
 ```
 
-CLI
+### CLI
 
 ```bash
 $ seqfold TAGCTCAGCTGGGAGAGCGCCTGCTTTGCACGCAGGAGGT -t 32 -v
@@ -30,11 +30,17 @@ TAGCTCAGCTGGGAGAGCGCCTGCTTTGCACGCAGGAGGT
 -6.58
 ```
 
+### Notes
+
+- The type of nucleic acid, DNA or RNA, is inferred from the input sequence.
+- `seqfold` is case-insensitive with the input sequence.
+- The default temperature is 37 degrees Celsius for both the Python and CLI interface.
+
 ## Motivation
 
-Knowing nucleic acid sequences' secondary structures is essential in synbio for selecting [primers for PCR](https://academic.oup.com/nar/article/40/15/e115/1223759), designing [oligos for MAGE](https://pubs.acs.org/doi/abs/10.1021/acssynbio.5b00219), and tuning [RBS expression rates](https://www.sciencedirect.com/science/article/pii/B9780123851208000024).
+Secondary structure prediction is used for selecting [primers for PCR](https://academic.oup.com/nar/article/40/15/e115/1223759), designing [oligos for MAGE](https://pubs.acs.org/doi/abs/10.1021/acssynbio.5b00219), and tuning [RBS expression rates](https://www.sciencedirect.com/science/article/pii/B9780123851208000024).
 
-While [UNAFold](http://unafold.rna.albany.edu/?q=DINAMelt/software) and [mfold](https://www.ibridgenetwork.org/#!/profiles/1045554571442/innovations/1/) are the most widely used applications for nucleic acid secondary structure prediction, their format and license are restrictive. `seqfold` is meant to be a more open-source, but minimal, application for predicting minimum free energy secondary structure.
+While [UNAFold](http://unafold.rna.albany.edu/?q=DINAMelt/software) and [mfold](https://www.ibridgenetwork.org/#!/profiles/1045554571442/innovations/1/) are the most widely used applications for nucleic acid secondary structure prediction, their format and license are restrictive. `seqfold` is meant to be an open-source, minimalist alternative for predicting minimum free energy secondary structure.
 
 |              | seqfold               | mfold                                                                                  | UNAFold                                                                                          |
 | ------------ | --------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |

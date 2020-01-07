@@ -58,13 +58,10 @@ def parse_args(args):
         type=float,
         metavar="FLOAT",
         default=37.0,
-        help="temperature to fold at (Celcius)",
+        help="temperature in Celcius to fold at ",
     )
     parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="log each structure (i,j,description,ddG)",
+        "-v", "--verbose", action="store_true", help="log a 2D folding description",
     )
     parser.add_argument(
         "--version", action="version", version="seqfold {ver}".format(ver=__version__),
@@ -73,11 +70,13 @@ def parse_args(args):
     return parser.parse_args(args)
 
 
-def calc_dg(seq: str, temp: float) -> float:
+def calc_dg(seq: str, temp: float = 37.0) -> float:
     """Fold the sequence and return just the delta G of the structure
 
     Args:
         seq: The sequence to fold
+    
+    Keyword Args:
         temp: The temperature to fold at
 
     Returns:
