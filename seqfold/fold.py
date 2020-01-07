@@ -1,7 +1,9 @@
 """Predict nucleic acid secondary structure"""
 
 import argparse
+from functools import lru_cache
 import math
+import random
 import sys
 from typing import Any, Dict, List, Tuple
 
@@ -117,6 +119,11 @@ def fold(seq: str, temp: float = 37.0) -> List[Tuple[int, int, str, float]]:
     Zuker and Stiegler, 1981
     https://www.ncbi.nlm.nih.gov/pmc/articles/PMC326673/pdf/nar00394-0137.pdf
 
+    If the sequence is 50 or more bp long, isolated matching bp
+    are ignored in V(i,j). This is based on an approach described in:
+    Mathews, Sabina, Zuker and Turner, 1999
+    https://www.ncbi.nlm.nih.gov/pubmed/10329189
+
     Args:
         seq: The sequence to fold
 
@@ -143,30 +150,71 @@ def fold(seq: str, temp: float = 37.0) -> List[Tuple[int, int, str, float]]:
         raise RuntimeError(f"Unknown bp: ${diff}.\n\tOnly DNA/RNA foldable")
     emap = DNA_ENERGIES if dna else RNA_ENERGIES
 
+    n = len(seq)
     v_cache: Any = []
     w_cache: Any = []
-    for _ in range(len(seq)):
-        v_cache.append([(None, "", [])] * len(seq))
-        w_cache.append([(None, "", [])] * len(seq))
-
-    # for increasing fragment length; smaller fragments first
-    for f_len in range(4, len(seq)):
-        # for increasing start index
-        for i in range(len(seq) - f_len):
-            # fill
-            _v(seq, i, i + f_len, temp, v_cache, w_cache, emap)
+    for _ in range(n):
+        v_cache.append([(None, "", [])] * n)
+        w_cache.append([(None, "", [])] * n)
 
     # gather the min energy structure over the full sequence
-    min_e, _, _ = _w(seq, 0, len(seq) - 1, temp, v_cache, w_cache, emap)
+    min_e, _, _ = _w(seq, 0, n - 1, temp, v_cache, w_cache, emap)
     min_e = round(min_e, 2)
 
     # get the structure out of the cache
     # _debug(v_cache, w_cache)
-    structs = _traceback(0, len(seq) - 1, v_cache, w_cache)
+    structs = _traceback(0, n - 1, v_cache, w_cache)
     total_e = sum(s[-1] for s in structs)
     assert abs(total_e - min_e) < 0.2, f"{total_e} != {min_e}"
 
     return structs
+
+
+def _w(
+    seq: str, i: int, j: int, temp: float, v_cache: Cache, w_cache: Cache, emap: Any
+) -> Tuple[float, str, List[Tuple[int, int]]]:
+    """Find and return the lowest free energy structure in Sij subsequence
+
+    Figure 2B in Zuker and Stiegler, 1981
+
+    Args:
+        seq: The sequence being folded
+        i: The start index
+        j: The end index (inclusive)
+        temp: The temperature in Kelvin
+        v_cache: Free energy cache for if i and j bp
+        w_cache: Free energy cache for lowest energy structure from i to j. 0 otherwise
+
+    Returns:
+        float: The free energy for the subsequence from i to j
+    """
+
+    if w_cache[i][j][0] != None:
+        return w_cache[i][j]
+
+    if j - i < 4:
+        w_cache[i][j] = (math.inf, "", [])
+        return w_cache[i][j]
+
+    w1 = _w(seq, i + 1, j, temp, v_cache, w_cache, emap)
+    w2 = _w(seq, i, j - 1, temp, v_cache, w_cache, emap)
+    w3 = _v(seq, i, j, temp, v_cache, w_cache, emap)
+
+    w4, w4_type = math.inf, "BIFURCATION"
+    w4_ij: List[Tuple[int, int]] = []
+    for i_1 in range(i + 1, j - 1):
+        w4_test, unpaired, helixes = _multi_branch(
+            seq, i, i_1, j, temp, v_cache, w_cache, emap, False,
+        )
+
+        if w4_test < w4:
+            w4 = w4_test
+            w4_ij = [(i, i_1), (i_1 + 1, j)]
+            w4_type = "BIFURCATION:" + str(unpaired) + "n/" + str(helixes) + "h"
+
+    w = min([w1, w2, w3, (w4, w4_type, w4_ij)], key=lambda x: x[0])
+    w_cache[i][j] = w
+    return w
 
 
 def _v(
@@ -190,7 +238,7 @@ def _v(
         float: The minimum energy folding structure possible between i and j on seq
     """
 
-    if v_cache[i][j][0] is not None:
+    if v_cache[i][j][0] != None:
         return v_cache[i][j]
 
     # the ends must basepair for V(i,j)
@@ -207,54 +255,67 @@ def _v(
         w_cache[i][j] = (e1, e1_type, [])
         return v_cache[i][j]
 
+    # if the basepair is isolated, and the seq large, penalize at 1,600 kcal/mol
+    # heuristic for speeding this up
+    # from https://www.ncbi.nlm.nih.gov/pubmed/10329189
+    if i and j < len(seq) - 1 and len(seq) >= 50:
+        isolated_outer = emap["COMPLEMENT"][seq[i - 1]] != seq[j + 1]
+        isolated_inner = emap["COMPLEMENT"][seq[i + 1]] != seq[j - 1]
+
+        if isolated_outer and isolated_inner:
+            v_cache[i][j] = (1600, "", [])
+            return v_cache[i][j]
+
     # E2 = min{FL(i, j, i', j') + V(i', j')}, i<i'<j'<j
     # stacking region or bulge or interior loop; Figure 2A(2)
     # j-i=d>4; various pairs i',j' for j'-i'<d
-    e2 = math.inf
-    e2_type = ""
+    n = len(seq)
+    e2, e2_type = math.inf, ""
     e2_ij: List[Tuple[int, int]] = []
     for i_1 in range(i + 1, j - 4):
         for j_1 in range(i_1 + 4, j):
-            pair = seq[i] + seq[i_1] + "/" + seq[j] + seq[j_1]
-            pair_left = seq[i] + seq[i + 1] + "/" + seq[j] + seq[j - 1]
-            pair_right = seq[i_1 - 1] + seq[i_1] + \
-                "/" + seq[j_1 + 1] + seq[j_1]
+            # i_1 and j_1 must match
+            if emap["COMPLEMENT"][seq[i_1]] != seq[j_1]:
+                continue
+
+            pair = f"{seq[i]}{seq[i_1]}/{seq[j]}{seq[j_1]}"
+            pair_left = f"{seq[i]}{seq[i + 1]}/{seq[j]}{seq[j - 1]}"
+            pair_right = f"{seq[i_1 - 1]}{seq[i_1]}/{seq[j_1 + 1]}{seq[j_1]}"
             pair_outer = pair_left in emap["NN"] or pair_right in emap["NN"]
 
-            stack = i_1 == i + 1 and j_1 == j - 1 and pair in emap["NN"]
-            bulge_left = i_1 > i + 1 and pair in emap["NN"]
-            bulge_right = j_1 < j - 1 and pair in emap["NN"]
-
-            loop_left = seq[i: i_1 + 1]
-            loop_right = seq[j_1: j + 1]
+            stack = i_1 == i + 1 and j_1 == j - 1
+            bulge_left = i_1 > i + 1
+            bulge_right = j_1 < j - 1
 
             e2_test, e2_test_type = math.inf, ""
             if stack:
                 # it's a neighboring/stacking pair in a helix
                 e2_test = _pair(pair, seq, i, j, temp, emap)
-                e2_test_type = "STACK:" + pair
+                e2_test_type = f"STACK:{pair}"
 
-                if i > 0 and j == len(seq) - 1 or i == 0 and j < len(seq) - 1:
+                if i > 0 and j == n - 1 or i == 0 and j < n - 1:
                     # there's a dangling end
-                    e2_test_type = "STACK_DE:" + pair
+                    e2_test_type = f"STACK_DE:{pair}"
             elif bulge_left and bulge_right and not pair_outer:
                 # it's an interior loop
-                e2_test = _internal_loop(
-                    seq, i, j, loop_left, loop_right, temp, emap)
+                loop_left = seq[i : i_1 + 1]
+                loop_right = seq[j_1 : j + 1]
+                e2_test = _internal_loop(seq, i, j, loop_left, loop_right, temp, emap)
                 e2_test_type = "INTERIOR_LOOP"
 
                 if len(loop_left) == 3 and len(loop_right) == 3:
                     # technically an interior loop of 1. really 1bp mismatch
-                    e2_test_type = "STACK:" + \
-                        loop_left + "/" + loop_right[::-1]
+                    e2_test_type = f"STACK:{loop_left}/{loop_right[::-1]}"
             elif bulge_left and not bulge_right:
                 # it's a bulge on the left side
+                loop_left = seq[i : i_1 + 1]
                 e2_test = _bulge(pair, seq, i, j, loop_left, temp, emap)
-                e2_test_type = "BULGE:" + str(i) + "-" + str(i_1)
-            elif bulge_right and not bulge_left:
+                e2_test_type = f"BULGE:{str(i)}-{str(i_1)}"
+            elif not bulge_left and bulge_right:
                 # it's a bulge on the right side
+                loop_right = seq[j_1 : j + 1]
                 e2_test = _bulge(pair, seq, i, j, loop_right, temp, emap)
-                e2_test_type = "BULGE:" + str(j_1) + "-" + str(j)
+                e2_test_type = f"BULGE:{str(j_1)}-{str(j)}"
             else:
                 # it's basically a hairpin, only outside bp match
                 continue
@@ -275,8 +336,7 @@ def _v(
         if e3_test < e3:
             e3 = e3_test
             e3_ij = [(i + 1, i_1), (i_1 + 1, j - 1)]
-            e3_type = "BIFURCATION:" + \
-                str(unpaired) + "n/" + str(helixes) + "h"
+            e3_type = f"BIFURCATION:{str(unpaired)}n/{str(helixes)}h"
 
     e = min(
         [(e1, e1_type, e1_ij), (e2, e2_type, e2_ij), (e3, e3_type, e3_ij)],
@@ -284,54 +344,6 @@ def _v(
     )
     v_cache[i][j] = e
     return e
-
-
-def _w(
-    seq: str, i: int, j: int, temp: float, v_cache: Cache, w_cache: Cache, emap: Any
-) -> Tuple[float, str, List[Tuple[int, int]]]:
-    """Find and return the lowest free energy structure in Sij subsequence
-
-    Figure 2B
-
-    Args:
-        seq: The sequence being folded
-        i: The start index
-        j: The end index (inclusive)
-        temp: The temperature in Kelvin
-        v_cache: Free energy cache for if i and j bp
-        w_cache: Free energy cache for lowest energy structure from i to j. 0 otherwise
-
-    Returns:
-        float: The free energy for the subsequence from i to j
-    """
-
-    if w_cache[i][j][0] is not None:
-        return w_cache[i][j]
-
-    if j - i < 4:
-        w_cache[i][j] = (math.inf, "", [])
-        return w_cache[i][j]
-
-    w1 = _w(seq, i + 1, j, temp, v_cache, w_cache, emap)
-    w2 = _w(seq, i, j - 1, temp, v_cache, w_cache, emap)
-    w3 = _v(seq, i, j, temp, v_cache, w_cache, emap)
-
-    w4, w4_type = math.inf, "BIFURCATION"
-    w4_ij: List[Tuple[int, int]] = []
-    for i_1 in range(i + 1, j - 1):
-        w4_test, unpaired, helixes = _multi_branch(
-            seq, i, i_1, j, temp, v_cache, w_cache, emap, False,
-        )
-
-        if w4_test < w4:
-            w4 = w4_test
-            w4_ij = [(i, i_1), (i_1 + 1, j)]
-            w4_type = "BIFURCATION:" + \
-                str(unpaired) + "n/" + str(helixes) + "h"
-
-    w = min([w1, w2, w3, (w4, w4_type, w4_ij)], key=lambda x: x[0])
-    w_cache[i][j] = w
-    return w
 
 
 def _d_g(d_h: float, d_s: float, temp: float) -> float:
@@ -442,7 +454,7 @@ def _hairpin(seq: str, i: int, j: int, temp: float, emap: Dict[str, Any]) -> flo
     if j - i < 4:
         return math.inf
 
-    hairpin = seq[i: j + 1]
+    hairpin = seq[i : j + 1]
     hairpin_len = len(hairpin) - 2
     pair = hairpin[0] + hairpin[1] + "/" + hairpin[-1] + hairpin[-2]
 
@@ -462,10 +474,9 @@ def _hairpin(seq: str, i: int, j: int, temp: float, emap: Dict[str, Any]) -> flo
         d_g += _d_g(d_h, d_s, temp)
     else:
         # it's too large, extrapolate
-        hairpin_max_len = max(emap["HAIRPIN_LOOPS"].keys())
-        d_h, d_s = emap["HAIRPIN_LOOPS"][hairpin_max_len]
+        d_h, d_s = emap["HAIRPIN_LOOPS"][30]
         d_g_inc = _d_g(d_h, d_s, temp)
-        d_g += _j_s(hairpin_len, hairpin_max_len, d_g_inc, temp)
+        d_g += _j_s(hairpin_len, 30, d_g_inc, temp)
 
     # add penalty for a terminal mismatch
     if hairpin_len > 3 and pair in emap["TERMINAL_MM"]:
@@ -508,10 +519,9 @@ def _bulge(
         d_g = _d_g(d_h, d_s, temp)
     else:
         # it's too large for pre-calculated list, extrapolate
-        loop_len_max = max(emap["BULGE_LOOPS"].keys())
-        d_h, d_s = emap["BULGE_LOOPS"][loop_len_max]
+        d_h, d_s = emap["BULGE_LOOPS"][30]
         d_g = _d_g(d_h, d_s, temp)
-        d_g = _j_s(loop_len, loop_len_max, d_g, temp)
+        d_g = _j_s(loop_len, 30, d_g, temp)
 
     if loop_len == 1:
         # if len 1, include the delta G of intervening NN (SantaLucia 2004)
@@ -552,17 +562,14 @@ def _internal_loop(
         float: The free energy associated with the internal loop
     """
 
-    pair_left_mm = left[:2] + "/" + right[-2::][::-1]
-    pair_right_mm = left[-2:] + "/" + right[:2][::-1]
+    pair_left_mm = f"{left[:2]}/{right[-2::][::-1]}"
+    pair_right_mm = f"{left[-2:]}/{right[:2][::-1]}"
     loop_left = len(left) - 2
     loop_right = len(right) - 2
     loop_len = loop_left + loop_right
 
     # single bp mismatch, sum up the two single mismatch pairs
     if loop_left == 1 and loop_right == 1:
-        if pair_left_mm in emap["NN"] or pair_right_mm in emap["NN"]:
-            raise RuntimeError()
-
         return _pair(pair_left_mm, seq, i, j, temp, emap) + _pair(
             pair_right_mm, seq, i + 1, j - 1, temp, emap
         )
@@ -573,10 +580,9 @@ def _internal_loop(
         d_g = _d_g(d_h, d_s, temp)
     else:
         # it's too large an internal loop, extrapolate
-        loop_max_len = max(emap["INTERNAL_LOOPS"].keys())
-        d_h, d_s = emap["INTERNAL_LOOPS"][loop_max_len]
+        d_h, d_s = emap["INTERNAL_LOOPS"][30]
         d_g = _d_g(d_h, d_s, temp)
-        d_g = _j_s(loop_len, loop_max_len, d_g, temp)
+        d_g = _j_s(loop_len, 30, d_g, temp)
 
     # apply an asymmetry penalty
     loop_asymmetry = abs(loop_left - loop_right)
@@ -624,14 +630,13 @@ def _multi_branch(
     """
 
     e_left, e_ltype, e_lpairs = _w(seq, i, k, temp, v_cache, w_cache, emap)
-    e_right, e3_rtype, e_rpairs = _w(
-        seq, k + 1, j, temp, v_cache, w_cache, emap)
+    e_right, e_rtype, e_rpairs = _w(seq, k + 1, j, temp, v_cache, w_cache, emap)
 
     # at least three multi-loops here; Fig 2A
     helixes = 3 if helix else 2
     if "BIFURCATION" in e_ltype:  # TODO: recurse to go higher
         helixes += 1
-    if "BIFURCATION" in e3_rtype:
+    if "BIFURCATION" in e_rtype:
         helixes += 1
 
     # add up the unpaired bp count
@@ -770,8 +775,7 @@ def _debug(v_cache, w_cache):
     print(",".join([str(n) for n in range(len(w_cache))]))
     for i, row in enumerate(w_cache):
         print(
-            ",".join(
-                [str(round(r, 1)) if r is not None else "." for r, _, _ in row])
+            ",".join([str(round(r, 1)) if r is not None else "." for r, _, _ in row])
             + ","
             + str(i)
         )
@@ -780,8 +784,7 @@ def _debug(v_cache, w_cache):
     print(",".join([str(n) for n in range(len(v_cache))]))
     for i, row in enumerate(v_cache):
         print(
-            ",".join(
-                [str(round(r, 1)) if r is not None else "." for r, _, _ in row])
+            ",".join([str(round(r, 1)) if r is not None else "." for r, _, _ in row])
             + ","
             + str(i)
         )
@@ -789,14 +792,12 @@ def _debug(v_cache, w_cache):
     print("\n")
     print(",".join([str(n) for n in range(len(w_cache))]))
     for i, row in enumerate(w_cache):
-        print(",".join([str(ij).replace(", ", "-")
-                        for _, _, ij in row]) + "," + str(i))
+        print(",".join([str(ij).replace(", ", "-") for _, _, ij in row]) + "," + str(i))
 
     print("\n")
     print(",".join([str(n) for n in range(len(v_cache))]))
     for i, row in enumerate(v_cache):
-        print(",".join([str(ij).replace(", ", "-")
-                        for _, _, ij in row]) + "," + str(i))
+        print(",".join([str(ij).replace(", ", "-") for _, _, ij in row]) + "," + str(i))
 
     print("\n")
     print(",".join([str(n) for n in range(len(w_cache))]))

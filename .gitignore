@@ -128,4 +128,9 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# vscode settings
 .vscode
+
+# development/test files
+/data/dna
+*.stats

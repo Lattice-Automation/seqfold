@@ -1,6 +1,7 @@
 """Test DNA/RNA folding."""
 
 from os import path
+from time import time
 import unittest
 
 from seqfold.dna import DNA_ENERGIES
@@ -21,16 +22,16 @@ class TestFold(unittest.TestCase):
             calc_dg("EASFEASFAST", 37.0)
 
     def test_fold_dna(self):
-        """Test DNA folding to find min energy secondary structure."""
+        """DNA folding to find min energy secondary structure."""
 
         # unafold's estimates for free energy estimates of DNA oligos
         unafold_dgs = {
-            "TAGCTCAGCTGGGAGAGCGCCTGCTTTGCACGCAGGAGGT": -6.85,  # W(i,j) bifurcation
+            "TAGCTCAGCTGGGAGAGCGCCTGCTTTGCACGCAGGAGGT": -6.85,
             "GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC": -10.94,  # three branched structure
             "GGGGGCATAGCTCAGCTGGGAGAGCGCCTGCTTTGCACGCAGGAGGTCTGCGGTTCGATCCCGCGCGCTCCCACCA": -15.50,
             "TGAGACGGAAGGGGATGATTGTCCCCTTCCGTCTCA": -18.10,
-            "ACCCCCTCCTTCCTTGGATCAAGGGGCTCAA": -3.65,  # unafold == -3.65
-            "TGTCAGAAGTTTCCAAATGGCCAGCAATCAACCCATTCCATTGGGGATACAATGGTACAGTTTCGCATATTGTCGGTGAAAATGGTTCCATTAAACTCC": -9.35,
+            "ACCCCCTCCTTCCTTGGATCAAGGGGCTCAA": -3.65,
+            # "TGTCAGAAGTTTCCAAATGGCCAGCAATCAACCCATTCCATTGGGGATACAATGGTACAGTTTCGCATATTGTCGGTGAAAATGGTTCCATTAAACTCC": -9.35,
         }
 
         # writing results to examples for comparison
@@ -54,7 +55,7 @@ class TestFold(unittest.TestCase):
                 ex.write(",".join([str(round(sf, 2)), str(uf), seq]) + "\n")
 
     def test_bulge(self):
-        """Test delta G calc of a bulge."""
+        """Calc delta G calc of a bulge."""
 
         # mock bulge of CAT on one side and AG on other
         # from pg 429 of SantaLucia, 2004
@@ -64,10 +65,8 @@ class TestFold(unittest.TestCase):
         pair_dg = _bulge(pair, seq, 5, 7, "CTC", 310.15, DNA_ENERGIES)
         self.assertAlmostEqual(3.22, pair_dg, delta=0.4)
 
-        # self.assertEqual(_bulge("CT/GA", seq, 5, 22, 310.15), 0.0)
-
     def test_pair(self):
-        """Test delta G of pairs with and without mismatches."""
+        """Calc delta G of pairs with and without mismatches."""
 
         pairs = [
             ("CT/GA", -1.28),
@@ -83,7 +82,7 @@ class TestFold(unittest.TestCase):
             self.assertAlmostEqual(dg_est, dg_actual, delta=0.02)
 
     def test_hairpin(self):
-        """Test delta G of a hairpin structure."""
+        """Calc delta G of a hairpin structure."""
 
         # hairpin = "CCTTGG"
         seq = "ACCCCCTCCTTCCTTGGATCAAGGGGCTCAA"
@@ -103,7 +102,7 @@ class TestFold(unittest.TestCase):
         self.assertAlmostEqual(0.67, hairpin_dg, delta=0.1)
 
     def test_internal_loop(self):
-        """Test internal loop."""
+        """Calc dg of an internal loop."""
 
         seq = "ACCCCCTCCTTCCTTGGATCAAGGGGCTCAA"
         i = 6
