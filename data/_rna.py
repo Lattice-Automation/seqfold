@@ -5,7 +5,7 @@ from os import path
 DIR = path.dirname(path.realpath(__file__))
 DIR_DATA = path.join(DIR, "..", "data")
 
-DE = path.join(DIR_DATA, "rna.dangle.txt")
+DE = path.join(DIR_DATA, "rna.dangle.txt")  # input files
 DE_DH = path.join(DIR_DATA, "rna.dangle.dh.txt")
 
 LOOP = path.join(DIR_DATA, "rna.loop.txt")
@@ -17,7 +17,7 @@ STACK_DH = path.join(DIR_DATA, "rna.stack.dh.txt")
 TSTACK = path.join(DIR_DATA, "rna.tstack.txt")
 TSTACK_DH = path.join(DIR_DATA, "rna.tstack.dh.txt")
 
-RNA_PY = path.join(DIR_DATA, "..", "seqfold", "rna.py")
+RNA_PY = path.join(DIR_DATA, "..", "seqfold", "rna.py")  # output
 
 RNA_COMPLEMENT = {"A": "U", "U": "A", "G": "C", "C": "G", "N": "N"}
 

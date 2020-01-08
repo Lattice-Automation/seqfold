@@ -28,9 +28,10 @@ setup(
     url="https://github.com/Lattice-Automation/seqfold",
     install_requires=requirements,
     classifiers=[
-        "Development Status :: 2 - Pre-Alpha",
-        "Programming Language :: Python",
+        "Development Status :: 4 - Beta",
+        "Programming Language :: Python :: 3 :: Only",
         "Topic :: Scientific/Engineering :: Bio-Informatics",
+        "Environment :: Console",
     ],
     entry_points={"console_scripts": ["seqfold=seqfold.fold:run"],},
 )

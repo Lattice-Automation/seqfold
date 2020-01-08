@@ -6,7 +6,7 @@ test:
 	python3 -m unittest discover tests -p '*_test.py'
 
 parse:
-	python3 ./scripts/rna.py
+	python3 ./data/_rna.py
 	black ./seqfold/rna.py
 
 patch: test
