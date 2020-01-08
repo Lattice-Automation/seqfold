@@ -1,9 +1,7 @@
 """Predict nucleic acid secondary structure"""
 
 import argparse
-from functools import lru_cache
 import math
-import random
 import sys
 from typing import Any, Dict, List, Tuple
 
@@ -58,7 +56,7 @@ def parse_args(args):
         type=float,
         metavar="FLOAT",
         default=37.0,
-        help="temperature in Celcius to fold at ",
+        help="temperature in Celcius",
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="log a 2D folding description",
@@ -142,11 +140,15 @@ def fold(seq: str, temp: float = 37.0) -> List[Tuple[int, int, str, float]]:
     # figure out whether it's DNA or RNA, choose energy map
     dna = True
     bps = set(seq)
-    if not bps.difference("ATGU"):
+    if "U" in bps and "T" in bps:
+        raise RuntimeError(
+            "Both T and U in sequence. Provide one or the other for DNA OR RNA."
+        )
+    if not bps.difference("AUGC"):
         dna = False
     elif set("ATGC").difference(bps):
         diff = str(set("ATGC").difference(bps))
-        raise RuntimeError(f"Unknown bp: ${diff}.\n\tOnly DNA/RNA foldable")
+        raise RuntimeError(f"Unknown bp: {diff}. Only DNA/RNA foldable")
     emap = DNA_ENERGIES if dna else RNA_ENERGIES
 
     n = len(seq)

@@ -37,18 +37,49 @@ class TestFold(unittest.TestCase):
         # writing results to examples for comparison
         results = {}
 
-        for seq, unafold_est in unafold_dgs.items():
+        for seq, ufold in unafold_dgs.items():
             dg = calc_dg(seq, temp=37.0)
 
             # accepting a 25% difference
-            delta = abs(0.25 * unafold_est)
-            self.assertAlmostEqual(dg, unafold_est, delta=delta)
+            delta = abs(0.25 * ufold)
+            self.assertAlmostEqual(dg, ufold, delta=delta)
 
             # save result
-            results[seq] = (dg, unafold_est)
+            results[seq] = (dg, ufold)
 
         # save results to examples
         with open(path.join(DIR, "..", "examples", "dna.csv"), "w") as ex:
+            ex.write("seqfold,UNAFold,seq\n")
+
+            for seq, (sf, uf) in results.items():
+                ex.write(",".join([str(round(sf, 2)), str(uf), seq]) + "\n")
+
+    def test_fold_rna(self):
+        """RNA folding to find min energy secondary structure."""
+
+        # unafold's estimates for free energy estimates of RNA oligos
+        unafold_dgs = {
+            "ACCCCCUCCUUCCUUGGAUCAAGGGGCUCAA": -9.5,
+            "AAGGGGUUGGUCGCCUCGACUAAGCGGCUUGGAAUUCC": -10.1,
+            "UUGGAGUACACAACCUGUACACUCUUUC": -4.3,
+            # "CACUACUCCAAGGACCGUAUCUUUCUCAGUGCGACAGUAA": -3.5,
+        }
+
+        # writing results to examples for comparison
+        results = {}
+
+        for seq, ufold in unafold_dgs.items():
+            dg = calc_dg(seq, temp=37.0)
+
+            # accepting a 25% difference
+            delta = abs(0.25 * max(dg, ufold))
+            self.assertAlmostEqual(dg, ufold, delta=delta)
+
+            # save result
+            results[seq] = (dg, ufold)
+
+        # save results to examples
+        with open(path.join(DIR, "..", "examples", "rna.csv"), "w") as ex:
             ex.write("seqfold,UNAFold,seq\n")
 
             for seq, (sf, uf) in results.items():

@@ -21,6 +21,31 @@ RNA_PY = path.join(DIR_DATA, "..", "seqfold", "rna.py")  # output
 
 RNA_COMPLEMENT = {"A": "U", "U": "A", "G": "C", "C": "G", "N": "N"}
 
+RNA_EXPORT = """
+# the energies are the same for each loop stack in the
+# reverse complementary direction
+RNA_NN.update({k[::-1]: v for k, v in RNA_NN.items()})
+RNA_INTERNAL_MM.update(
+    {k[::-1]: v for k, v in RNA_INTERNAL_MM.items() if k[::-1] not in RNA_INTERNAL_MM}
+)
+RNA_TERMINAL_MM.update(
+    {k[::-1]: v for k, v in RNA_TERMINAL_MM.items() if k[::-1] not in RNA_TERMINAL_MM}
+)
+RNA_DE.update({k[::-1]: v for k, v in RNA_DE.items() if k[::-1] not in RNA_DE})
+
+RNA_ENERGIES = {
+    "BULGE_LOOPS": RNA_BULGE_LOOPS,
+    "COMPLEMENT": RNA_COMPLEMENT,
+    "DE": RNA_DE,
+    "HAIRPIN_LOOPS": RNA_HAIRPIN_LOOPS,
+    "MULTIBRANCH": RNA_MULTIBRANCH,
+    "INTERNAL_LOOPS": RNA_INTERNAL_LOOPS,
+    "INTERNAL_MM": RNA_INTERNAL_MM,
+    "NN": RNA_NN,
+    "TERMINAL_MM": RNA_TERMINAL_MM,
+}
+"""
+
 
 def parse():
     """
@@ -46,6 +71,7 @@ def parse():
     outfile += "RNA_INTERNAL_LOOPS = " + str(iloops) + "\n\n"
     outfile += "RNA_BULGE_LOOPS = " + str(bloops) + "\n\n"
     outfile += "RNA_HAIRPIN_LOOPS = " + str(hloops) + "\n\n"
+    outfile += RNA_EXPORT
 
     with open(RNA_PY, "w") as out:
         out.write(outfile)
@@ -65,11 +91,11 @@ def parse_de():
             lines = [l.strip() for l in lines if l.strip()]
 
             for bi in range(len(lines) // 9):
-                bi = bi * 9
+                ci = bi * 9
 
-                top = lines[bi + 5]
+                top = lines[ci + 5]
                 vs = [
-                    float(v) if v != "." else 0.0 for v in lines[bi + 8].strip().split()
+                    float(v) if v != "." else 0.0 for v in lines[ci + 8].strip().split()
                 ]
 
                 assert len(vs) == 16, len(vs)
@@ -86,9 +112,11 @@ def parse_de():
                         bottomright = bps[i % 4]
 
                     stack = topleft + topright + "/" + bottomleft + bottomright
-                    v = vs[i]
 
-                    e_map[stack] = v
+                    e_map[stack] = vs[i]
+
+        assert "UC/A." in e_map
+
         return e_map
 
     dg_map = parse_de_file(DE)
