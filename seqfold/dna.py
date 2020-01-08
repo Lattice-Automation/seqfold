@@ -2,12 +2,15 @@
 
 from typing import Any, Dict, Tuple
 
-DNA_COMPLEMENT = {"A": "T", "T": "A", "G": "C", "C": "G", "N": "N"}
+from .types import Comp, MultiBranch, BpEnergy, LoopEnergy, Energies
 
-DNA_MULTIBRANCH = (4.6, 0.4, 0.1)
+
+DNA_COMPLEMENT: Comp = {"A": "T", "T": "A", "G": "C", "C": "G", "N": "N"}
+
+DNA_MULTIBRANCH: MultiBranch = (4.6, 0.4, 0.1)
 """a, b and c in a linear multi-branch energy change function."""
 
-DNA_NN = {
+DNA_NN: BpEnergy = {
     "init": (0.2, -5.7),
     "init_G/C": (0.0, 0.0),
     "init_A/T": (2.2, 6.9),
@@ -28,7 +31,7 @@ SantaLucia (1998)
 A unified view of polymer, dumbbell, and oligonucleotide DNA nearest-neighbor thermodynamics
 """
 
-DNA_INTERNAL_MM = {
+DNA_INTERNAL_MM: BpEnergy = {
     "AG/TT": (1.0, 0.9),
     "AT/TG": (-2.5, -8.3),
     "CG/GT": (-4.1, -11.7),
@@ -90,7 +93,7 @@ Allawi & SantaLucia (1998), Nucl Acids Res 26: 2694-2701 *
 Peyret et al. (1999), Biochemistry 38: 3468-3477 *
 """
 
-DNA_TERMINAL_MM = {
+DNA_TERMINAL_MM: BpEnergy = {
     "AA/TA": (-3.1, -7.8),
     "TA/AA": (-2.5, -6.3),
     "CA/GA": (-4.3, -10.7),
@@ -145,7 +148,7 @@ Terminal mismatch table (DNA)
 SantaLucia & Peyret (2001) Patent Application WO 01/94611
 """
 
-DNA_DE = {
+DNA_DE: BpEnergy = {
     "AA/.T": (0.2, 2.3),
     "AC/.G": (-6.3, -17.1),
     "AG/.C": (-3.7, -10.0),
@@ -195,7 +198,7 @@ DNA_TERMINAL_MM.update(
 )
 DNA_DE.update({k[::-1]: v for k, v in DNA_DE.items() if k[::-1] not in DNA_DE})
 
-DNA_TRI_TETRA_LOOPS = {
+DNA_TRI_TETRA_LOOPS: BpEnergy = {
     "AGAAT": (-1.5, 0.0),
     "AGCAT": (-1.5, 0.0),
     "AGGAT": (-1.5, 0.0),
@@ -339,7 +342,7 @@ delta S was computed using delta G and delta H and is in cal / (K x mol)
 (versus delta H in kcal / mol)
 """
 
-DNA_INTERNAL_LOOPS: Dict[int, Tuple[float, float]] = {
+DNA_INTERNAL_LOOPS: LoopEnergy = {
     1: (0, 0),
     2: (0, 0),
     3: (0, -10.3),
@@ -389,7 +392,7 @@ delta G (asymmetry) = |length A - length B| x 0.3 (kcal / mol)
 where A and B are lengths of both sides of loop
 """
 
-DNA_BULGE_LOOPS: Dict[int, Tuple[float, float]] = {
+DNA_BULGE_LOOPS: LoopEnergy = {
     1: (0, -12.9),
     2: (0, -9.4),
     3: (0, -10.0),
@@ -434,7 +437,7 @@ For bulge loops of size 1, the intervening NN energy is used.
 Closing AT penalty is applied on both sides
 """
 
-DNA_HAIRPIN_LOOPS: Dict[int, Tuple[float, float]] = {
+DNA_HAIRPIN_LOOPS: LoopEnergy = {
     1: (0, 0.0),
     2: (0, 0.0),
     3: (0, -11.3),
@@ -482,15 +485,17 @@ From formula 8-9 of the paper:
 An additional 1.6 delta entropy penalty if the hairpin is closed by AT
 """
 
-DNA_ENERGIES: Dict[str, Any] = {
-    "BULGE_LOOPS": DNA_BULGE_LOOPS,
-    "COMPLEMENT": DNA_COMPLEMENT,
-    "DE": DNA_DE,
-    "HAIRPIN_LOOPS": DNA_HAIRPIN_LOOPS,
-    "MULTIBRANCH": DNA_MULTIBRANCH,
-    "INTERNAL_LOOPS": DNA_INTERNAL_LOOPS,
-    "INTERNAL_MM": DNA_INTERNAL_MM,
-    "NN": DNA_NN,
-    "TERMINAL_MM": DNA_TERMINAL_MM,
-    "TRI_TETRA_LOOPS": DNA_TRI_TETRA_LOOPS,
-}
+
+DNA_ENERGIES = Energies(
+    DNA_BULGE_LOOPS,
+    DNA_COMPLEMENT,
+    DNA_DE,
+    DNA_HAIRPIN_LOOPS,
+    DNA_MULTIBRANCH,
+    DNA_INTERNAL_LOOPS,
+    DNA_INTERNAL_MM,
+    DNA_NN,
+    DNA_TERMINAL_MM,
+    DNA_TRI_TETRA_LOOPS,
+)
+

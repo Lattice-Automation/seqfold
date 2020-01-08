@@ -4,8 +4,9 @@ from os import path
 from time import time
 import unittest
 
+from seqfold import calc_dg
 from seqfold.dna import DNA_ENERGIES
-from seqfold.fold import calc_dg, _bulge, _pair, _hairpin, _internal_loop
+from seqfold.fold import _bulge, _pair, _hairpin, _internal_loop
 
 
 DIR = path.dirname(path.realpath(__file__))
@@ -20,6 +21,13 @@ class TestFold(unittest.TestCase):
         # it should throw if a non-sense sequence is provided
         with self.assertRaises(RuntimeError):
             calc_dg("EASFEASFAST", 37.0)
+
+        # Both U and T, mix of RNA and DNA
+        with self.assertRaises(RuntimeError):
+            calc_dg("ATGCATGACGATUU", 37.0)
+
+        # should not throw
+        calc_dg("ATGGATTTAGATAGAT")
 
     def test_fold_dna(self):
         """DNA folding to find min energy secondary structure."""

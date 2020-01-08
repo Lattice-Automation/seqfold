@@ -131,6 +131,9 @@ dmypy.json
 # vscode settings
 .vscode
 
+# .c files during build
+seqfold/*.c
+
 # development/test files
 /data/dna
 *.stats

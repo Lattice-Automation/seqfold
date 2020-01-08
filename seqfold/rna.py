@@ -1,10 +1,14 @@
 """RNA enthalpy and entropy change parameters."""
 
-RNA_COMPLEMENT = {"A": "U", "U": "A", "G": "C", "C": "G", "N": "N"}
+from typing import Dict, Tuple
 
-RNA_MULTIBRANCH = (9.3, 0.91, -0.63)
+from .types import Comp, MultiBranch, BpEnergy, LoopEnergy, Energies
 
-RNA_NN = {
+RNA_COMPLEMENT: Dict[str, str] = {"A": "U", "U": "A", "G": "C", "C": "G", "N": "N"}
+
+RNA_MULTIBRANCH: Tuple[float, float, float] = (9.3, 0.91, -0.63)
+
+RNA_NN: BpEnergy = {
     "AA/UU": (-6.8, -19.0),
     "AC/UG": (-11.4, -29.7),
     "AG/UC": (-10.5, -27.1),
@@ -23,7 +27,7 @@ RNA_NN = {
     "UU/AA": (-6.8, -19.0),
 }
 
-RNA_INTERNAL_MM = {
+RNA_INTERNAL_MM: BpEnergy = {
     "AA/AA": (0.0, 0.0),
     "AA/AC": (0.0, 0.0),
     "AA/AG": (0.0, 0.0),
@@ -266,7 +270,7 @@ RNA_INTERNAL_MM = {
     "UU/UU": (0.0, 0.0),
 }
 
-RNA_TERMINAL_MM = {
+RNA_TERMINAL_MM: BpEnergy = {
     "AA/AA": (0.0, 0.0),
     "AA/AC": (0.0, 0.0),
     "AA/AG": (0.0, 0.0),
@@ -525,7 +529,7 @@ RNA_TERMINAL_MM = {
     "UU/UU": (0.0, 0.0),
 }
 
-RNA_DE = {
+RNA_DE: BpEnergy = {
     "AA/A.": (0.0, 0.0),
     "AC/A.": (0.0, 0.0),
     "AG/A.": (0.0, 0.0),
@@ -656,7 +660,7 @@ RNA_DE = {
     "U./UU": (0.0, 0.0),
 }
 
-RNA_INTERNAL_LOOPS = {
+RNA_INTERNAL_LOOPS: LoopEnergy = {
     1: (0.0, 0.0),
     2: (0.0, 0.0),
     3: (0.0, 0.0),
@@ -689,7 +693,7 @@ RNA_INTERNAL_LOOPS = {
     30: (-1.3, -16.1),
 }
 
-RNA_BULGE_LOOPS = {
+RNA_BULGE_LOOPS: LoopEnergy = {
     1: (10.6, 21.9),
     2: (7.1, 13.9),
     3: (7.1, 12.6),
@@ -722,7 +726,7 @@ RNA_BULGE_LOOPS = {
     30: (7.1, 3.2),
 }
 
-RNA_HAIRPIN_LOOPS = {
+RNA_HAIRPIN_LOOPS: LoopEnergy = {
     1: (0.0, 0.0),
     2: (0.0, 0.0),
     3: (1.3, -13.2),
@@ -767,14 +771,15 @@ RNA_TERMINAL_MM.update(
 )
 RNA_DE.update({k[::-1]: v for k, v in RNA_DE.items() if k[::-1] not in RNA_DE})
 
-RNA_ENERGIES = {
-    "BULGE_LOOPS": RNA_BULGE_LOOPS,
-    "COMPLEMENT": RNA_COMPLEMENT,
-    "DE": RNA_DE,
-    "HAIRPIN_LOOPS": RNA_HAIRPIN_LOOPS,
-    "MULTIBRANCH": RNA_MULTIBRANCH,
-    "INTERNAL_LOOPS": RNA_INTERNAL_LOOPS,
-    "INTERNAL_MM": RNA_INTERNAL_MM,
-    "NN": RNA_NN,
-    "TERMINAL_MM": RNA_TERMINAL_MM,
-}
+RNA_ENERGIES = Energies(
+    RNA_BULGE_LOOPS,
+    RNA_COMPLEMENT,
+    RNA_DE,
+    RNA_HAIRPIN_LOOPS,
+    RNA_MULTIBRANCH,
+    RNA_INTERNAL_LOOPS,
+    RNA_INTERNAL_MM,
+    RNA_NN,
+    RNA_TERMINAL_MM,
+    None,
+)

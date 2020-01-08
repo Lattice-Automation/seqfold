@@ -3,6 +3,8 @@ import sys
 from pkg_resources import VersionConflict, require
 from setuptools import setup, find_packages
 
+from Cython.Build import cythonize
+
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
@@ -22,7 +24,8 @@ setup(
     author="JJTimmons",
     author_email="jtimmons@latticeautomation.com",
     license="mit",
-    packages=find_packages(exclude=["data"]),
+    # packages=find_packages(exclude=["data"]),
+    ext_modules=cythonize("seqfold/*.py"),
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/Lattice-Automation/seqfold",
@@ -34,4 +37,5 @@ setup(
         "Environment :: Console",
     ],
     entry_points={"console_scripts": ["seqfold=seqfold.fold:run"],},
+    zip_safe=False,
 )

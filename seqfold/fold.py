@@ -3,14 +3,18 @@
 import argparse
 import math
 import sys
-from typing import Any, Dict, List, Tuple
+from typing import Any, cast, Dict, Optional, List, Tuple
 
 from . import __version__
 from .dna import DNA_ENERGIES
 from .rna import RNA_ENERGIES
+from .types import Energies
 
 
-Cache = List[List[Any]]
+Struct = Tuple[Optional[float], str, List[Tuple[int, int]]]
+"""A single structure."""
+
+Cache = List[List[Struct]]
 """A map from i, j tuple to a value."""
 
 
@@ -30,7 +34,7 @@ def run():
         print(calc_dg(args.seq, temp=args.temp))
 
 
-def parse_args(args):
+def parse_args(args: List[str]) -> argparse.Namespace:
     """Parse command line parameters
 
     Created and based on an example from pyscaffold:
@@ -144,36 +148,44 @@ def fold(seq: str, temp: float = 37.0) -> List[Tuple[int, int, str, float]]:
         raise RuntimeError(
             "Both T and U in sequence. Provide one or the other for DNA OR RNA."
         )
-    if not bps.difference("AUGC"):
+    if all(bp in "AUCG" for bp in bps):
         dna = False
-    elif set("ATGC").difference(bps):
-        diff = str(set("ATGC").difference(bps))
+    elif any(bp not in "ATGC" for bp in bps):
+        diff = [bp for bp in bps if bp not in "ATUGC"]
         raise RuntimeError(f"Unknown bp: {diff}. Only DNA/RNA foldable")
     emap = DNA_ENERGIES if dna else RNA_ENERGIES
+    emap = cast(Energies, emap)
 
     n = len(seq)
-    v_cache: Any = []
-    w_cache: Any = []
+    v_cache: Cache = []
+    w_cache: Cache = []
     for _ in range(n):
         v_cache.append([(None, "", [])] * n)
         w_cache.append([(None, "", [])] * n)
 
     # gather the min energy structure over the full sequence
     min_e, _, _ = _w(seq, 0, n - 1, temp, v_cache, w_cache, emap)
-    min_e = round(min_e, 2)
+    min_e = round(cast(float, min_e), 2)
 
     # get the structure out of the cache
     # _debug(v_cache, w_cache)
     structs = _traceback(0, n - 1, v_cache, w_cache)
     total_e = sum(s[-1] for s in structs)
-    assert abs(total_e - min_e) < 0.2, f"{total_e} != {min_e}"
 
-    return structs
+    assert abs(cast(float, total_e) - min_e) < 0.2, f"{total_e} != {min_e}"
+
+    return [(a, b, c, cast(float, d)) for a, b, c, d in structs]
 
 
 def _w(
-    seq: str, i: int, j: int, temp: float, v_cache: Cache, w_cache: Cache, emap: Any
-) -> Tuple[float, str, List[Tuple[int, int]]]:
+    seq: str,
+    i: int,
+    j: int,
+    temp: float,
+    v_cache: Cache,
+    w_cache: Cache,
+    emap: Energies,
+) -> Struct:
     """Find and return the lowest free energy structure in Sij subsequence
 
     Figure 2B in Zuker and Stiegler, 1981
@@ -219,8 +231,14 @@ def _w(
 
 
 def _v(
-    seq: str, i: int, j: int, temp: float, v_cache: Cache, w_cache: Cache, emap: Any
-) -> Tuple[float, str, List[Tuple[int, int]]]:
+    seq: str,
+    i: int,
+    j: int,
+    temp: float,
+    v_cache: Cache,
+    w_cache: Cache,
+    emap: Energies,
+) -> Struct:
     """Find, store and return the minimum free energy of the structure between i and j
 
     If i and j don't bp, store and return INF.
@@ -243,7 +261,7 @@ def _v(
         return v_cache[i][j]
 
     # the ends must basepair for V(i,j)
-    if emap["COMPLEMENT"][seq[i]] != seq[j]:
+    if emap.COMPLEMENT[seq[i]] != seq[j]:
         v_cache[i][j] = (math.inf, "", [])
         return v_cache[i][j]
 
@@ -260,8 +278,8 @@ def _v(
     # heuristic for speeding this up
     # from https://www.ncbi.nlm.nih.gov/pubmed/10329189
     if i and j < len(seq) - 1 and len(seq) >= 50:
-        isolated_outer = emap["COMPLEMENT"][seq[i - 1]] != seq[j + 1]
-        isolated_inner = emap["COMPLEMENT"][seq[i + 1]] != seq[j - 1]
+        isolated_outer = emap.COMPLEMENT[seq[i - 1]] != seq[j + 1]
+        isolated_inner = emap.COMPLEMENT[seq[i + 1]] != seq[j - 1]
 
         if isolated_outer and isolated_inner:
             v_cache[i][j] = (1600, "", [])
@@ -276,13 +294,13 @@ def _v(
     for i_1 in range(i + 1, j - 4):
         for j_1 in range(i_1 + 4, j):
             # i_1 and j_1 must match
-            if emap["COMPLEMENT"][seq[i_1]] != seq[j_1]:
+            if emap.COMPLEMENT[seq[i_1]] != seq[j_1]:
                 continue
 
             pair = f"{seq[i]}{seq[i_1]}/{seq[j]}{seq[j_1]}"
             pair_left = f"{seq[i]}{seq[i + 1]}/{seq[j]}{seq[j - 1]}"
             pair_right = f"{seq[i_1 - 1]}{seq[i_1]}/{seq[j_1 + 1]}{seq[j_1]}"
-            pair_outer = pair_left in emap["NN"] or pair_right in emap["NN"]
+            pair_outer = pair_left in emap.NN or pair_right in emap.NN
 
             stack = i_1 == i + 1 and j_1 == j - 1
             bulge_left = i_1 > i + 1
@@ -322,7 +340,8 @@ def _v(
                 continue
 
             # add V(i', j')
-            e2_test += _v(seq, i_1, j_1, temp, v_cache, w_cache, emap)[0]
+            e2_test_v = _v(seq, i_1, j_1, temp, v_cache, w_cache, emap)[0]
+            e2_test += cast(float, e2_test_v)
             if e2_test < e2:
                 e2, e2_type, e2_ij = e2_test, e2_test_type, [(i_1, j_1)]
 
@@ -383,9 +402,7 @@ def _j_s(query_len: int, known_len: int, d_g_x: float, temp: float) -> float:
     return d_g_x + 2.44 * gas_constant * temp * math.log(query_len / float(known_len))
 
 
-def _pair(
-    pair: str, seq: str, i: int, j: int, temp: float, emap: Dict[str, Any]
-) -> float:
+def _pair(pair: str, seq: str, i: int, j: int, temp: float, emap: Energies) -> float:
     """Get the free energy for a pair.
 
     Using the indexes i and j, check whether it's at the end of
@@ -409,36 +426,36 @@ def _pair(
 
     if i > 0 and j < len(seq) - 1:
         # it's internal
-        d_h, d_s = emap["NN"][pair] if pair in emap["NN"] else emap["INTERNAL_MM"][pair]
+        d_h, d_s = emap.NN[pair] if pair in emap.NN else emap.INTERNAL_MM[pair]
         return _d_g(d_h, d_s, temp)
 
     if i == 0 and j == len(seq) - 1:
         # it's terminal
-        d_h, d_s = emap["NN"][pair] if pair in emap["NN"] else emap["TERMINAL_MM"][pair]
+        d_h, d_s = emap.NN[pair] if pair in emap.NN else emap.TERMINAL_MM[pair]
         return _d_g(d_h, d_s, temp)
 
     if i > 0 and j == len(seq) - 1:
         # it's dangling on left
-        d_h, d_s = emap["NN"][pair] if pair in emap["NN"] else emap["TERMINAL_MM"][pair]
+        d_h, d_s = emap.NN[pair] if pair in emap.NN else emap.TERMINAL_MM[pair]
         d_g = _d_g(d_h, d_s, temp)
 
         pair_de = seq[i - 1] + seq[i] + "/." + seq[j]
-        d_h, d_s = emap["DE"][pair_de]
+        d_h, d_s = emap.DE[pair_de]
         return d_g + _d_g(d_h, d_s, temp)
 
     if i == 0 and j < len(seq) - 1:
         # it's dangling on right
-        d_h, d_s = emap["NN"][pair] if pair in emap["NN"] else emap["TERMINAL_MM"][pair]
+        d_h, d_s = emap.NN[pair] if pair in emap.NN else emap.TERMINAL_MM[pair]
         d_g = _d_g(d_h, d_s, temp)
 
         pair_de = "." + seq[i] + "/" + seq[j + 1] + seq[j]
-        d_h, d_s = emap["DE"][pair_de]
+        d_h, d_s = emap.DE[pair_de]
         return d_g + _d_g(d_h, d_s, temp)
 
     raise RuntimeError
 
 
-def _hairpin(seq: str, i: int, j: int, temp: float, emap: Dict[str, Any]) -> float:
+def _hairpin(seq: str, i: int, j: int, temp: float, emap: Energies) -> float:
     """Calculate the free energy of a hairpin.
 
     Args:
@@ -459,30 +476,30 @@ def _hairpin(seq: str, i: int, j: int, temp: float, emap: Dict[str, Any]) -> flo
     hairpin_len = len(hairpin) - 2
     pair = hairpin[0] + hairpin[1] + "/" + hairpin[-1] + hairpin[-2]
 
-    if emap["COMPLEMENT"][hairpin[0]] != hairpin[-1]:
+    if emap.COMPLEMENT[hairpin[0]] != hairpin[-1]:
         # not known terminal pair, nothing to close "hairpin"
         raise RuntimeError()
 
     d_g = 0.0
-    if "TRI_TETRA_LOOPS" in emap and hairpin in emap["TRI_TETRA_LOOPS"]:
+    if emap.TRI_TETRA_LOOPS and hairpin in emap.TRI_TETRA_LOOPS:
         # it's a pre-known hairpin with known value
-        d_h, d_s = emap["TRI_TETRA_LOOPS"][hairpin]
+        d_h, d_s = emap.TRI_TETRA_LOOPS[hairpin]
         d_g = _d_g(d_h, d_s, temp)
 
     # add penalty based on size
-    if hairpin_len in emap["HAIRPIN_LOOPS"]:
-        d_h, d_s = emap["HAIRPIN_LOOPS"][hairpin_len]
+    if hairpin_len in emap.HAIRPIN_LOOPS:
+        d_h, d_s = emap.HAIRPIN_LOOPS[hairpin_len]
         d_g += _d_g(d_h, d_s, temp)
     else:
         # it's too large, extrapolate
-        d_h, d_s = emap["HAIRPIN_LOOPS"][30]
+        d_h, d_s = emap.HAIRPIN_LOOPS[30]
         d_g_inc = _d_g(d_h, d_s, temp)
         d_g += _j_s(hairpin_len, 30, d_g_inc, temp)
 
     # add penalty for a terminal mismatch
-    if hairpin_len > 3 and pair in emap["TERMINAL_MM"]:
-        if pair in emap["TERMINAL_MM"]:
-            d_h, d_s = emap["TERMINAL_MM"][pair]
+    if hairpin_len > 3 and pair in emap.TERMINAL_MM:
+        if pair in emap.TERMINAL_MM:
+            d_h, d_s = emap.TERMINAL_MM[pair]
             d_g += _d_g(d_h, d_s, temp)
 
     # add penalty if length 3 and AT closing, formula 8 from SantaLucia, 2004
@@ -493,7 +510,7 @@ def _hairpin(seq: str, i: int, j: int, temp: float, emap: Dict[str, Any]) -> flo
 
 
 def _bulge(
-    pair: str, seq: str, i: int, j: int, bulge: str, temp: float, emap: Dict[str, Any]
+    pair: str, seq: str, i: int, j: int, bulge: str, temp: float, emap: Energies
 ) -> float:
     """Calculate the free energy associated with a bulge.
 
@@ -515,12 +532,12 @@ def _bulge(
         return math.inf
 
     # add penalty based on size
-    if loop_len in emap["BULGE_LOOPS"]:
-        d_h, d_s = emap["BULGE_LOOPS"][loop_len]
+    if loop_len in emap.BULGE_LOOPS:
+        d_h, d_s = emap.BULGE_LOOPS[loop_len]
         d_g = _d_g(d_h, d_s, temp)
     else:
         # it's too large for pre-calculated list, extrapolate
-        d_h, d_s = emap["BULGE_LOOPS"][30]
+        d_h, d_s = emap.BULGE_LOOPS[30]
         d_g = _d_g(d_h, d_s, temp)
         d_g = _j_s(loop_len, 30, d_g, temp)
 
@@ -536,7 +553,7 @@ def _bulge(
 
 
 def _internal_loop(
-    seq: str, i: int, j: int, left: str, right: str, temp: float, emap: Dict[str, Any]
+    seq: str, i: int, j: int, left: str, right: str, temp: float, emap: Energies
 ) -> float:
     """Calculate the free energy of an internal loop.
 
@@ -576,12 +593,12 @@ def _internal_loop(
         )
 
     # apply a penalty based on loop size
-    if loop_len in emap["INTERNAL_LOOPS"]:
-        d_h, d_s = emap["INTERNAL_LOOPS"][loop_len]
+    if loop_len in emap.INTERNAL_LOOPS:
+        d_h, d_s = emap.INTERNAL_LOOPS[loop_len]
         d_g = _d_g(d_h, d_s, temp)
     else:
         # it's too large an internal loop, extrapolate
-        d_h, d_s = emap["INTERNAL_LOOPS"][30]
+        d_h, d_s = emap.INTERNAL_LOOPS[30]
         d_g = _d_g(d_h, d_s, temp)
         d_g = _j_s(loop_len, 30, d_g, temp)
 
@@ -590,10 +607,10 @@ def _internal_loop(
     d_g += 0.3 * loop_asymmetry
 
     # apply penalty based on the mismatching pairs on either side the loop
-    d_h, d_s = emap["TERMINAL_MM"][pair_left_mm]
+    d_h, d_s = emap.TERMINAL_MM[pair_left_mm]
     d_g += _d_g(d_h, d_s, temp)
 
-    d_h, d_s = emap["TERMINAL_MM"][pair_right_mm]
+    d_h, d_s = emap.TERMINAL_MM[pair_right_mm]
     d_g += _d_g(d_h, d_s, temp)
 
     return d_g
@@ -607,7 +624,7 @@ def _multi_branch(
     temp: float,
     v_cache: Cache,
     w_cache: Cache,
-    emap: Dict[str, Any],
+    emap: Energies,
     helix: bool = False,
 ) -> Tuple[float, int, int]:
     """Calculate a multi-branch energy penalty using a linear formula.
@@ -655,18 +672,18 @@ def _multi_branch(
             unpaired += i3 - k - 2
 
     # penalty for unmatched bp and multi-branch
-    a, b, c = emap["MULTIBRANCH"]
+    a, b, c = emap.MULTIBRANCH
     e_multibranch = a + b * unpaired + c * helixes
 
     # energy of min-energy neighbors
-    e = e_multibranch + e_left + e_right
+    e = e_multibranch + cast(float, e_left) + cast(float, e_right)
 
     return e, unpaired, helixes
 
 
 def _traceback(
     i: int, j: int, v_cache: Cache, w_cache: Cache
-) -> List[Tuple[int, int, str, float]]:
+) -> List[Tuple[int, int, str, Optional[float]]]:
     """Traceback thru the V(i,j) and W(i,j) caches to find the structure
 
     For each step, get to the lowest energy W(i,j) within that block
@@ -693,7 +710,7 @@ def _traceback(
         while w_cache[i][j - 1][2] == ij:
             j -= 1
 
-    structs: List[Tuple[int, int, str, float]] = []
+    structs: List[Tuple[int, int, str, Optional[float]]] = []
     while True:
         e, desc, ij = v_cache[i][j]
 
@@ -728,14 +745,19 @@ def _traceback(
         e_sum = 0.0
         if traceback_left:
             left_i, left_j, _, _ = traceback_left[0]
-            e_sum += w_cache[left_i][left_j][0]
+            e_sum += cast(float, w_cache[left_i][left_j][0])
         if traceback_right:
             right_i, right_j, _, _ = traceback_right[0]
-            e_sum += w_cache[right_i][right_j][0]
+            e_sum += cast(float, w_cache[right_i][right_j][0])
 
         if structs:
             last_i, last_j, last_desc, last_e = structs[-1]
-            structs[-1] = (last_i, last_j, last_desc, round(last_e - e_sum, 2))
+            structs[-1] = (
+                last_i,
+                last_j,
+                last_desc,
+                round(cast(float, last_e) - e_sum, 2),
+            )
 
         return structs + traceback_left + traceback_right
 
@@ -743,8 +765,8 @@ def _traceback(
 
 
 def _trackback_energy(
-    structs: List[Tuple[int, int, str, float]]
-) -> List[Tuple[int, int, str, float]]:
+    structs: List[Tuple[int, int, str, Optional[float]]]
+) -> List[Tuple[int, int, str, Optional[float]]]:
     """Add energy to each structure, based on how it's W(i,j) differs from the one after
 
     Args:
@@ -754,13 +776,13 @@ def _trackback_energy(
         List[Tuple[int, int, str, float]]: Structures in the folded DNA with energy
     """
 
-    structs_e: List[Tuple[int, int, str, float]] = []
+    structs_e: List[Tuple[int, int, str, Optional[float]]] = []
     for index, struct in enumerate(structs):
         i, j, desc, e = struct
         e_next = 0.0
         if index < len(structs) - 1:
-            e_next = structs[index + 1][3]
-        structs_e.append((i, j, desc, round(e - e_next, 2)))
+            e_next = cast(float, structs[index + 1][3])
+        structs_e.append((i, j, desc, round(cast(float, e) - e_next, 2)))
     return structs_e
 
 

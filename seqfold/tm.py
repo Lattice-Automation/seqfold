@@ -51,14 +51,14 @@ def calc_tm(seq1: str, seq2: str = "", pcr: bool = True) -> float:
     # SantaLucia & Hicks (2004), Annu. Rev. Biophys. Biomol. Struct 33: 415-440
 
     # start with initiation enthalpy and entropy
-    delta_h, delta_s = DNA_ENERGIES["NN"]["init"]
+    delta_h, delta_s = DNA_ENERGIES.NN["init"]
 
     # add in initial A/T and initial G/Cs
     init = seq1[0] + seq1[-1]
     init_at = init.count("A") + init.count("T")
     init_gc = init.count("G") + init.count("C")
-    init_at_h, init_at_s = DNA_ENERGIES["NN"]["init_A/T"]
-    init_gc_h, init_gc_s = DNA_ENERGIES["NN"]["init_G/C"]
+    init_at_h, init_at_s = DNA_ENERGIES.NN["init_A/T"]
+    init_gc_h, init_gc_s = DNA_ENERGIES.NN["init_G/C"]
     delta_h += init_at * init_at_h + init_gc * init_gc_h
     delta_s += init_at * init_at_s + init_gc * init_gc_s
 
@@ -70,15 +70,15 @@ def calc_tm(seq1: str, seq2: str = "", pcr: bool = True) -> float:
 
         # assuming internal neighbor pair
         pair_delta_h, pair_delta_s = 0.0, 0.0
-        if pair in DNA_ENERGIES["NN"]:
-            pair_delta_h, pair_delta_s = DNA_ENERGIES["NN"][pair]
-        elif pair in DNA_ENERGIES["INTERNAL_MM"]:
-            pair_delta_h, pair_delta_s = DNA_ENERGIES["INTERNAL_MM"][pair]
+        if pair in DNA_ENERGIES.NN:
+            pair_delta_h, pair_delta_s = DNA_ENERGIES.NN[pair]
+        elif pair in DNA_ENERGIES.INTERNAL_MM:
+            pair_delta_h, pair_delta_s = DNA_ENERGIES.INTERNAL_MM[pair]
 
         # overwrite if it's a terminal pair
         if i in (0, len(seq1) - 2):
-            if pair in DNA_ENERGIES["TERMINAL_MM"]:
-                pair_delta_h, pair_delta_s = DNA_ENERGIES["TERMINAL_MM"][pair]
+            if pair in DNA_ENERGIES.TERMINAL_MM:
+                pair_delta_h, pair_delta_s = DNA_ENERGIES.TERMINAL_MM[pair]
 
         delta_h += pair_delta_h
         delta_s += pair_delta_s

@@ -1,9 +1,10 @@
 import profile
 import pstats
 
-from seqfold.fold import calc_dg, _bulge, _pair, _hairpin, _internal_loop
+from seqfold import calc_dg
 
-
+# ~7 seconds with python alone
+# ~4 seconds with cython extension's output
 STATS_FILE = "fold_profile.stats"
 
 SEQ = "'GAAATAGACGCCAAGTTCAATCCGTACTCCGACGTACGATGGAACAGTGTGGATGTGACGAGCTTCATTTATACCCTTCGCGCGCCGGACCGGGGTCCGCAAGGCGCGGCGGTGCACAAGCAATTGACAACTAACCACCGTGTATTCGTTATGGCACCAGGGAGTTTAAGCCGAGTCAATGGAGCTCGCAATACAGAGTT'"
@@ -14,6 +15,5 @@ profile.run(SCRIPT, STATS_FILE)
 STATS = pstats.Stats(STATS_FILE)
 STATS.strip_dirs()
 STATS.sort_stats("cumulative")
-# STATS.print_stats("fold")
 STATS.print_stats()
 

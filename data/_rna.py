@@ -33,17 +33,18 @@ RNA_TERMINAL_MM.update(
 )
 RNA_DE.update({k[::-1]: v for k, v in RNA_DE.items() if k[::-1] not in RNA_DE})
 
-RNA_ENERGIES = {
-    "BULGE_LOOPS": RNA_BULGE_LOOPS,
-    "COMPLEMENT": RNA_COMPLEMENT,
-    "DE": RNA_DE,
-    "HAIRPIN_LOOPS": RNA_HAIRPIN_LOOPS,
-    "MULTIBRANCH": RNA_MULTIBRANCH,
-    "INTERNAL_LOOPS": RNA_INTERNAL_LOOPS,
-    "INTERNAL_MM": RNA_INTERNAL_MM,
-    "NN": RNA_NN,
-    "TERMINAL_MM": RNA_TERMINAL_MM,
-}
+RNA_ENERGIES = Energies(
+    RNA_BULGE_LOOPS,
+    RNA_COMPLEMENT,
+    RNA_DE,
+    RNA_HAIRPIN_LOOPS,
+    RNA_MULTIBRANCH,
+    RNA_INTERNAL_LOOPS,
+    RNA_INTERNAL_MM,
+    RNA_NN,
+    RNA_TERMINAL_MM,
+    None,
+)
 """
 
 
@@ -64,13 +65,13 @@ def parse():
 
     iloops, bloops, hloops = parse_loops()
 
-    outfile += "RNA_NN = " + str(stack_nn_map) + "\n\n"
-    outfile += "RNA_INTERNAL_MM = " + str(stack_mm_map) + "\n\n"
-    outfile += "RNA_TERMINAL_MM = " + str(tstack_map) + "\n\n"
-    outfile += "RNA_DE = " + str(de_map) + "\n\n"
-    outfile += "RNA_INTERNAL_LOOPS = " + str(iloops) + "\n\n"
-    outfile += "RNA_BULGE_LOOPS = " + str(bloops) + "\n\n"
-    outfile += "RNA_HAIRPIN_LOOPS = " + str(hloops) + "\n\n"
+    outfile += "RNA_NN: BpEnergy = " + str(stack_nn_map) + "\n\n"
+    outfile += "RNA_INTERNAL_MM: BpEnergy = " + str(stack_mm_map) + "\n\n"
+    outfile += "RNA_TERMINAL_MM: BpEnergy = " + str(tstack_map) + "\n\n"
+    outfile += "RNA_DE: BpEnergy = " + str(de_map) + "\n\n"
+    outfile += "RNA_INTERNAL_LOOPS: LoopEnergy = " + str(iloops) + "\n\n"
+    outfile += "RNA_BULGE_LOOPS: LoopEnergy = " + str(bloops) + "\n\n"
+    outfile += "RNA_HAIRPIN_LOOPS: LoopEnergy = " + str(hloops) + "\n\n"
     outfile += RNA_EXPORT
 
     with open(RNA_PY, "w") as out:
