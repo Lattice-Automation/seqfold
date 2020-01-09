@@ -2,7 +2,6 @@ import sys
 
 from pkg_resources import VersionConflict, require
 from setuptools import setup, find_packages
-
 from Cython.Build import cythonize
 
 with open("README.md", "r") as fh:
@@ -36,6 +35,7 @@ setup(
         "Topic :: Scientific/Engineering :: Bio-Informatics",
         "Environment :: Console",
     ],
-    entry_points={"console_scripts": ["seqfold=seqfold.fold:run"],},
+    entry_points={"console_scripts": ["seqfold=seqfold.main:run"],},
     zip_safe=False,
+    extra_require={"dev": ["black", "pylint"], "build": ["setuptools", "Cython"]},
 )

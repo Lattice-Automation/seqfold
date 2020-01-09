@@ -4,9 +4,9 @@ from typing import Dict, Tuple
 
 from .types import Comp, MultiBranch, BpEnergy, LoopEnergy, Energies
 
-RNA_COMPLEMENT: Dict[str, str] = {"A": "U", "U": "A", "G": "C", "C": "G", "N": "N"}
+RNA_COMPLEMENT: Comp = {"A": "U", "U": "A", "G": "C", "C": "G", "N": "N"}
 
-RNA_MULTIBRANCH: Tuple[float, float, float] = (9.3, 0.91, -0.63)
+RNA_MULTIBRANCH: MultiBranch = (9.3, 0.91, -0.63)
 
 RNA_NN: BpEnergy = {
     "AA/UU": (-6.8, -19.0),

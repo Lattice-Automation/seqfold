@@ -24,13 +24,13 @@ class Energies:
         terminal_mm: BpEnergy,
         tri_tetra_loops: Optional[BpEnergy] = None,
     ):
-        self.BULGE_LOOPS = bulge_loops
-        self.COMPLEMENT = complement
-        self.DE = de
-        self.HAIRPIN_LOOPS = hairpin_loops
-        self.MULTIBRANCH = multibranch
-        self.INTERNAL_LOOPS = internal_loops
-        self.INTERNAL_MM = internal_mm
-        self.NN = nn
-        self.TERMINAL_MM = terminal_mm
-        self.TRI_TETRA_LOOPS = tri_tetra_loops
+        self.BULGE_LOOPS: LoopEnergy = bulge_loops
+        self.COMPLEMENT: Comp = complement
+        self.DE: BpEnergy = de
+        self.HAIRPIN_LOOPS: LoopEnergy = hairpin_loops
+        self.MULTIBRANCH: MultiBranch = multibranch
+        self.INTERNAL_LOOPS: LoopEnergy = internal_loops
+        self.INTERNAL_MM: BpEnergy = internal_mm
+        self.NN: BpEnergy = nn
+        self.TERMINAL_MM: BpEnergy = terminal_mm
+        self.TRI_TETRA_LOOPS: Optional[BpEnergy] = tri_tetra_loops

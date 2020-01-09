@@ -1,75 +1,18 @@
 """Predict nucleic acid secondary structure"""
 
-import argparse
 import math
-import sys
-from typing import Any, cast, Dict, Optional, List, Tuple
+from typing import Any, Dict, Optional, List, Tuple
 
-from . import __version__
 from .dna import DNA_ENERGIES
 from .rna import RNA_ENERGIES
 from .types import Energies
 
 
-Struct = Tuple[Optional[float], str, List[Tuple[int, int]]]
+Struct = Tuple[float, str, List[Tuple[int, int]]]
 """A single structure."""
 
 Cache = List[List[Struct]]
 """A map from i, j tuple to a value."""
-
-
-def run():
-    """Entry point for console_scripts.
-
-    Simply fold the DNA and report the minimum free energy
-    """
-
-    args = parse_args(sys.argv[1:])
-
-    if args.verbose:
-        dg, desc = calc_dg_verbose(args.seq, temp=args.temp)
-        print(desc)
-        print(dg)
-    else:
-        print(calc_dg(args.seq, temp=args.temp))
-
-
-def parse_args(args: List[str]) -> argparse.Namespace:
-    """Parse command line parameters
-
-    Created and based on an example from pyscaffold:
-    https://github.com/pyscaffold/pyscaffold/blob/master/src/pyscaffold/templates/skeleton.template
-
-    Args:
-        args ([str]): List of parameters as strings
-
-    Returns:
-        `argparse.Namespace`: command line parameters namespace
-    """
-
-    parser = argparse.ArgumentParser(
-        description="Predict the minimum free energy (kcal/mol) of a nucleic acid sequence"
-    )
-
-    parser.add_argument(
-        "seq", type=str, metavar="SEQ", help="nucleic acid sequence to fold",
-    )
-    parser.add_argument(
-        "-t",
-        dest="temp",
-        type=float,
-        metavar="FLOAT",
-        default=37.0,
-        help="temperature in Celcius",
-    )
-    parser.add_argument(
-        "-v", "--verbose", action="store_true", help="log a 2D folding description",
-    )
-    parser.add_argument(
-        "--version", action="version", version="seqfold {ver}".format(ver=__version__),
-    )
-
-    return parser.parse_args(args)
 
 
 def calc_dg(seq: str, temp: float = 37.0) -> float:
@@ -154,27 +97,26 @@ def fold(seq: str, temp: float = 37.0) -> List[Tuple[int, int, str, float]]:
         diff = [bp for bp in bps if bp not in "ATUGC"]
         raise RuntimeError(f"Unknown bp: {diff}. Only DNA/RNA foldable")
     emap = DNA_ENERGIES if dna else RNA_ENERGIES
-    emap = cast(Energies, emap)
 
     n = len(seq)
     v_cache: Cache = []
     w_cache: Cache = []
     for _ in range(n):
-        v_cache.append([(None, "", [])] * n)
-        w_cache.append([(None, "", [])] * n)
+        v_cache.append([(-math.inf, "", [])] * n)
+        w_cache.append([(-math.inf, "", [])] * n)
 
     # gather the min energy structure over the full sequence
     min_e, _, _ = _w(seq, 0, n - 1, temp, v_cache, w_cache, emap)
-    min_e = round(cast(float, min_e), 2)
+    min_e = round(min_e, 2)
 
     # get the structure out of the cache
     # _debug(v_cache, w_cache)
     structs = _traceback(0, n - 1, v_cache, w_cache)
     total_e = sum(s[-1] for s in structs)
 
-    assert abs(cast(float, total_e) - min_e) < 0.2, f"{total_e} != {min_e}"
+    assert abs(total_e - min_e) < 0.2, f"{total_e} != {min_e}"
 
-    return [(a, b, c, cast(float, d)) for a, b, c, d in structs]
+    return [(a, b, c, d) for a, b, c, d in structs]
 
 
 def _w(
@@ -202,7 +144,7 @@ def _w(
         float: The free energy for the subsequence from i to j
     """
 
-    if w_cache[i][j][0] != None:
+    if w_cache[i][j][0] != -math.inf:
         return w_cache[i][j]
 
     if j - i < 4:
@@ -220,12 +162,12 @@ def _w(
             seq, i, i_1, j, temp, v_cache, w_cache, emap, False,
         )
 
-        if w4_test < w4:
+        if w4_test != -math.inf and w4_test < w4:
             w4 = w4_test
             w4_ij = [(i, i_1), (i_1 + 1, j)]
             w4_type = "BIFURCATION:" + str(unpaired) + "n/" + str(helixes) + "h"
 
-    w = min([w1, w2, w3, (w4, w4_type, w4_ij)], key=lambda x: x[0])
+    w = _min_struct([w1, w2, w3, (w4, w4_type, w4_ij)])
     w_cache[i][j] = w
     return w
 
@@ -257,7 +199,7 @@ def _v(
         float: The minimum energy folding structure possible between i and j on seq
     """
 
-    if v_cache[i][j][0] != None:
+    if v_cache[i][j][0] != -math.inf:
         return v_cache[i][j]
 
     # the ends must basepair for V(i,j)
@@ -340,9 +282,8 @@ def _v(
                 continue
 
             # add V(i', j')
-            e2_test_v = _v(seq, i_1, j_1, temp, v_cache, w_cache, emap)[0]
-            e2_test += cast(float, e2_test_v)
-            if e2_test < e2:
+            e2_test += _v(seq, i_1, j_1, temp, v_cache, w_cache, emap)[0]
+            if e2_test != -math.inf and e2_test < e2:
                 e2, e2_type, e2_ij = e2_test, e2_test_type, [(i_1, j_1)]
 
     # E3 = min{W(i+1,i') + W(i'+1,j-1)}, i+1<i'<j-2
@@ -353,17 +294,31 @@ def _v(
             seq, i + 1, i_1, j - 1, temp, v_cache, w_cache, emap, True
         )
 
-        if e3_test < e3:
+        if e3_test != -math.inf and e3_test < e3:
             e3 = e3_test
             e3_ij = [(i + 1, i_1), (i_1 + 1, j - 1)]
             e3_type = f"BIFURCATION:{str(unpaired)}n/{str(helixes)}h"
 
-    e = min(
-        [(e1, e1_type, e1_ij), (e2, e2_type, e2_ij), (e3, e3_type, e3_ij)],
-        key=lambda x: x[0],
-    )
+    e = _min_struct([(e1, e1_type, e1_ij), (e2, e2_type, e2_ij), (e3, e3_type, e3_ij)])
     v_cache[i][j] = e
     return e
+
+
+def _min_struct(structs: List[Struct]) -> Struct:
+    """Return the struct with the lowest free energy that isn't -inf (undef)
+
+    Args:
+        structs: Structures being compared
+    
+    Returns:
+        struct: The min free energy structure
+    """
+
+    s: Struct = (math.inf, "", [])
+    for struct in structs:
+        if struct[0] != -math.inf and struct[0] < s[0]:
+            s = struct
+    return s
 
 
 def _d_g(d_h: float, d_s: float, temp: float) -> float:
@@ -676,14 +631,14 @@ def _multi_branch(
     e_multibranch = a + b * unpaired + c * helixes
 
     # energy of min-energy neighbors
-    e = e_multibranch + cast(float, e_left) + cast(float, e_right)
+    e = e_multibranch + e_left + e_right
 
     return e, unpaired, helixes
 
 
 def _traceback(
     i: int, j: int, v_cache: Cache, w_cache: Cache
-) -> List[Tuple[int, int, str, Optional[float]]]:
+) -> List[Tuple[int, int, str, float]]:
     """Traceback thru the V(i,j) and W(i,j) caches to find the structure
 
     For each step, get to the lowest energy W(i,j) within that block
@@ -710,7 +665,7 @@ def _traceback(
         while w_cache[i][j - 1][2] == ij:
             j -= 1
 
-    structs: List[Tuple[int, int, str, Optional[float]]] = []
+    structs: List[Tuple[int, int, str, float]] = []
     while True:
         e, desc, ij = v_cache[i][j]
 
@@ -745,10 +700,10 @@ def _traceback(
         e_sum = 0.0
         if traceback_left:
             left_i, left_j, _, _ = traceback_left[0]
-            e_sum += cast(float, w_cache[left_i][left_j][0])
+            e_sum += w_cache[left_i][left_j][0]
         if traceback_right:
             right_i, right_j, _, _ = traceback_right[0]
-            e_sum += cast(float, w_cache[right_i][right_j][0])
+            e_sum += w_cache[right_i][right_j][0]
 
         if structs:
             last_i, last_j, last_desc, last_e = structs[-1]
@@ -756,7 +711,7 @@ def _traceback(
                 last_i,
                 last_j,
                 last_desc,
-                round(cast(float, last_e) - e_sum, 2),
+                round(last_e - e_sum, 2),
             )
 
         return structs + traceback_left + traceback_right
@@ -765,8 +720,8 @@ def _traceback(
 
 
 def _trackback_energy(
-    structs: List[Tuple[int, int, str, Optional[float]]]
-) -> List[Tuple[int, int, str, Optional[float]]]:
+    structs: List[Tuple[int, int, str, float]]
+) -> List[Tuple[int, int, str, float]]:
     """Add energy to each structure, based on how it's W(i,j) differs from the one after
 
     Args:
@@ -776,13 +731,13 @@ def _trackback_energy(
         List[Tuple[int, int, str, float]]: Structures in the folded DNA with energy
     """
 
-    structs_e: List[Tuple[int, int, str, Optional[float]]] = []
+    structs_e: List[Tuple[int, int, str, float]] = []
     for index, struct in enumerate(structs):
         i, j, desc, e = struct
         e_next = 0.0
         if index < len(structs) - 1:
-            e_next = cast(float, structs[index + 1][3])
-        structs_e.append((i, j, desc, round(cast(float, e) - e_next, 2)))
+            e_next = structs[index + 1][3]
+        structs_e.append((i, j, desc, round(e - e_next, 2)))
     return structs_e
 
 
@@ -831,7 +786,3 @@ def _debug(v_cache, w_cache):
     print(",".join([str(n) for n in range(len(v_cache))]))
     for i, row in enumerate(v_cache):
         print(",".join([t if t else "." for _, t, _ in row]) + "," + str(i))
-
-
-if __name__ == "__main__":
-    run()
