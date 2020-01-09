@@ -3,6 +3,9 @@ import sys
 from pkg_resources import VersionConflict, require
 from setuptools import setup, find_packages
 from Cython.Build import cythonize
+from Cython.Compiler import Options
+
+Options.annotate = True
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
@@ -24,7 +27,18 @@ setup(
     author_email="jtimmons@latticeautomation.com",
     license="mit",
     # packages=find_packages(exclude=["data"]),
-    ext_modules=cythonize("seqfold/*.py"),
+    ext_modules=cythonize(
+        "seqfold/*.py*",
+        compiler_directives={
+            "binding": True,
+            "boundscheck": False,
+            "initializedcheck": False,
+            "infer_types": True,
+            "language_level": "3str",
+            "nonecheck": False,
+            "overflowcheck": False,
+        },
+    ),
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/Lattice-Automation/seqfold",
