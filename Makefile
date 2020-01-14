@@ -1,4 +1,5 @@
 install:
+	rm -rf ./build
 	python3 setup.py install
 	pip3 install . --user
 

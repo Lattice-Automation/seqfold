@@ -34,6 +34,7 @@ class TestFold(unittest.TestCase):
 
         # unafold's estimates for free energy estimates of DNA oligos
         unafold_dgs = {
+            "CGCAGGGAUACCCGCG": -3.8,
             "TAGCTCAGCTGGGAGAGCGCCTGCTTTGCACGCAGGAGGT": -6.85,
             "GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC": -10.94,  # three branched structure
             "GGGGGCATAGCTCAGCTGGGAGAGCGCCTGCTTTGCACGCAGGAGGTCTGCGGTTCGATCCCGCGCGCTCCCACCA": -15.50,
@@ -48,8 +49,8 @@ class TestFold(unittest.TestCase):
         for seq, ufold in unafold_dgs.items():
             dg = calc_dg(seq, temp=37.0)
 
-            # accepting a 25% difference
-            delta = abs(0.25 * ufold)
+            # accepting a 50% difference
+            delta = abs(0.5 * max(dg, ufold))
             self.assertAlmostEqual(dg, ufold, delta=delta)
 
             # save result
@@ -70,6 +71,7 @@ class TestFold(unittest.TestCase):
             "ACCCCCUCCUUCCUUGGAUCAAGGGGCUCAA": -9.5,
             "AAGGGGUUGGUCGCCUCGACUAAGCGGCUUGGAAUUCC": -10.1,
             "UUGGAGUACACAACCUGUACACUCUUUC": -4.3,
+            "UGCCUGGCGGCCGUAGCGCGGUGGUCCCACCUGACCCCAUGCCGAACUCAGAAGUGAAACGCCGUAGCGCCGAUGGUAGUGUGGGGUCUCCCCAUGCGAGAGUAGGGAACUGCCAGGCAU": -54.9
             # "CACUACUCCAAGGACCGUAUCUUUCUCAGUGCGACAGUAA": -3.5,
         }
 

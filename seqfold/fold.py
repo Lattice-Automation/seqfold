@@ -8,8 +8,22 @@ from .rna import RNA_ENERGIES
 from .types import Energies
 
 
-Struct = Tuple[float, str, List[Tuple[int, int]]]
-"""A single structure."""
+class Struct:
+    """A single structure with a free energy, description, and inward children."""
+
+    def __init__(
+        self, e: float = -math.inf, desc: str = "", ij: List[Tuple[int, int]] = []
+    ):
+        self.e: float = e
+        self.desc: str = desc
+        self.ij: List[Tuple[int, int]] = ij
+
+    def __eq__(self, other) -> bool:
+        return self.e == other.e and self.ij == other.ij
+
+    def __str__(self) -> str:
+        return str(f"{str(self.e)} {self.desc} {str(self.ij)}")
+
 
 Cache = List[List[Struct]]
 """A map from i, j tuple to a value."""
@@ -29,7 +43,7 @@ def calc_dg(seq: str, temp: float = 37.0) -> float:
     """
 
     structs = fold(seq, temp)
-    return round(sum([s[-1] for s in structs]), 2)
+    return round(sum(s.e for s in structs), 2)
 
 
 def calc_dg_verbose(seq: str, temp: float) -> Tuple[float, str]:
@@ -46,17 +60,19 @@ def calc_dg_verbose(seq: str, temp: float) -> Tuple[float, str]:
     structs = fold(seq, temp)
 
     folds = ["-"] * len(seq)
-    for i, j, desc, _ in structs:
-        folds[i] = "/"
-        folds[j] = "\\"
+    for struct in structs:
+        if len(struct.ij) == 1:
+            i, j = struct.ij[0]
+            folds[i] = "/"
+            folds[j] = "\\"
 
     desc_fold = "".join(folds)
     desc = f"{desc_fold}\n{seq}"
 
-    return round(sum([s[-1] for s in structs]), 2), desc
+    return round(sum(s.e for s in structs), 2), desc
 
 
-def fold(seq: str, temp: float = 37.0) -> List[Tuple[int, int, str, float]]:
+def fold(seq: str, temp: float = 37.0) -> List[Struct]:
     """Fold the DNA sequence and return lowest free energy score.
 
     Based on the approach described in:
@@ -75,10 +91,7 @@ def fold(seq: str, temp: float = 37.0) -> List[Tuple[int, int, str, float]]:
         temp: The temperature the fold takes place in, in Celcius
 
     Returns:
-        List[Tuple[int, int, str, float]]: A list of structures. Stacks, bulges, hairpins, etc.
-            The first two ints are the index on the left and right of the structure (the
-            closing indexes). Then a description of the structure followed by the delta delta G
-            of the structure: the added free energy change to the overall secondary structure
+        List[Struct]: A list of structures. Stacks, bulges, hairpins, etc.
     """
 
     seq = seq.upper()
@@ -99,24 +112,19 @@ def fold(seq: str, temp: float = 37.0) -> List[Tuple[int, int, str, float]]:
     emap = DNA_ENERGIES if dna else RNA_ENERGIES
 
     n = len(seq)
+    default: Struct = Struct()
     v_cache: Cache = []
     w_cache: Cache = []
     for _ in range(n):
-        v_cache.append([(-math.inf, "", [])] * n)
-        w_cache.append([(-math.inf, "", [])] * n)
+        v_cache.append([default] * n)
+        w_cache.append([default] * n)
 
-    # gather the min energy structure over the full sequence
-    min_e, _, _ = _w(seq, 0, n - 1, temp, v_cache, w_cache, emap)
-    min_e = round(min_e, 2)
+    # fill the cache
+    _w(seq, 0, n - 1, temp, v_cache, w_cache, emap)
 
     # get the structure out of the cache
     # _debug(v_cache, w_cache)
-    structs = _traceback(0, n - 1, v_cache, w_cache)
-    total_e = sum(s[-1] for s in structs)
-
-    assert abs(total_e - min_e) < 0.2, f"{total_e} != {min_e}"
-
-    return [(a, b, c, d) for a, b, c, d in structs]
+    return _traceback(0, n - 1, v_cache, w_cache)
 
 
 def _w(
@@ -144,30 +152,31 @@ def _w(
         float: The free energy for the subsequence from i to j
     """
 
-    if w_cache[i][j][0] != -math.inf:
+    if w_cache[i][j].e != -math.inf:
         return w_cache[i][j]
 
     if j - i < 4:
-        w_cache[i][j] = (math.inf, "", [])
+        w_cache[i][j] = Struct(math.inf)
         return w_cache[i][j]
 
     w1 = _w(seq, i + 1, j, temp, v_cache, w_cache, emap)
     w2 = _w(seq, i, j - 1, temp, v_cache, w_cache, emap)
     w3 = _v(seq, i, j, temp, v_cache, w_cache, emap)
 
-    w4, w4_type = math.inf, "BIFURCATION"
-    w4_ij: List[Tuple[int, int]] = []
+    w4 = Struct(math.inf, "BIFURCATION")
     for i_1 in range(i + 1, j - 1):
         w4_test, unpaired, helixes = _multi_branch(
             seq, i, i_1, j, temp, v_cache, w_cache, emap, False,
         )
 
-        if w4_test != -math.inf and w4_test < w4:
-            w4 = w4_test
-            w4_ij = [(i, i_1), (i_1 + 1, j)]
-            w4_type = "BIFURCATION:" + str(unpaired) + "n/" + str(helixes) + "h"
+        if w4_test != -math.inf and w4_test < w4.e:
+            w4 = Struct(
+                w4_test,
+                "BIFURCATION:" + str(unpaired) + "n/" + str(helixes) + "h",
+                [(i, i_1), (i_1 + 1, j)],
+            )
 
-    w = _min_struct([w1, w2, w3, (w4, w4_type, w4_ij)])
+    w = _min_struct(w1, w2, w3, w4)
     w_cache[i][j] = w
     return w
 
@@ -199,40 +208,39 @@ def _v(
         float: The minimum energy folding structure possible between i and j on seq
     """
 
-    if v_cache[i][j][0] != -math.inf:
+    if v_cache[i][j].e != -math.inf:
         return v_cache[i][j]
 
     # the ends must basepair for V(i,j)
     if emap.COMPLEMENT[seq[i]] != seq[j]:
-        v_cache[i][j] = (math.inf, "", [])
+        v_cache[i][j] = Struct(math.inf)
         return v_cache[i][j]
 
     # E1 = FH(i, j); hairpin
     pair = seq[i] + seq[i + 1] + "/" + seq[j] + seq[j - 1]
-    e1, e1_type = _hairpin(seq, i, j, temp, emap), "HAIRPIN:" + pair
-    e1_ij: List[Tuple[int, int]] = []
+    e1 = Struct(_hairpin(seq, i, j, temp, emap), "HAIRPIN:" + pair)
     if j - i == 4:  # small hairpin; 4bp
-        v_cache[i][j] = (e1, e1_type, [])
-        w_cache[i][j] = (e1, e1_type, [])
+        v_cache[i][j] = e1
+        w_cache[i][j] = e1
         return v_cache[i][j]
 
     # if the basepair is isolated, and the seq large, penalize at 1,600 kcal/mol
     # heuristic for speeding this up
     # from https://www.ncbi.nlm.nih.gov/pubmed/10329189
+    isolated_outer = False
     if i and j < len(seq) - 1 and len(seq) >= 50:
         isolated_outer = emap.COMPLEMENT[seq[i - 1]] != seq[j + 1]
         isolated_inner = emap.COMPLEMENT[seq[i + 1]] != seq[j - 1]
 
         if isolated_outer and isolated_inner:
-            v_cache[i][j] = (1600, "", [])
+            v_cache[i][j] = Struct(1600)
             return v_cache[i][j]
 
     # E2 = min{FL(i, j, i', j') + V(i', j')}, i<i'<j'<j
     # stacking region or bulge or interior loop; Figure 2A(2)
     # j-i=d>4; various pairs i',j' for j'-i'<d
     n = len(seq)
-    e2, e2_type = math.inf, ""
-    e2_ij: List[Tuple[int, int]] = []
+    e2 = Struct(math.inf)
     for i_1 in range(i + 1, j - 4):
         for j_1 in range(i_1 + 4, j):
             # i_1 and j_1 must match
@@ -242,7 +250,7 @@ def _v(
             pair = f"{seq[i]}{seq[i_1]}/{seq[j]}{seq[j_1]}"
             pair_left = f"{seq[i]}{seq[i + 1]}/{seq[j]}{seq[j - 1]}"
             pair_right = f"{seq[i_1 - 1]}{seq[i_1]}/{seq[j_1 + 1]}{seq[j_1]}"
-            pair_outer = pair_left in emap.NN or pair_right in emap.NN
+            pair_inner = pair_left in emap.NN or pair_right in emap.NN
 
             stack = i_1 == i + 1 and j_1 == j - 1
             bulge_left = i_1 > i + 1
@@ -257,7 +265,7 @@ def _v(
                 if i > 0 and j == n - 1 or i == 0 and j < n - 1:
                     # there's a dangling end
                     e2_test_type = f"STACK_DE:{pair}"
-            elif bulge_left and bulge_right and not pair_outer:
+            elif bulge_left and bulge_right and not pair_inner:
                 # it's an interior loop
                 loop_left = seq[i : i_1 + 1]
                 loop_right = seq[j_1 : j + 1]
@@ -282,29 +290,30 @@ def _v(
                 continue
 
             # add V(i', j')
-            e2_test += _v(seq, i_1, j_1, temp, v_cache, w_cache, emap)[0]
-            if e2_test != -math.inf and e2_test < e2:
-                e2, e2_type, e2_ij = e2_test, e2_test_type, [(i_1, j_1)]
+            e2_test += _v(seq, i_1, j_1, temp, v_cache, w_cache, emap).e
+            if e2_test != -math.inf and e2_test < e2.e:
+                e2 = Struct(e2_test, e2_test_type, [(i_1, j_1)])
 
     # E3 = min{W(i+1,i') + W(i'+1,j-1)}, i+1<i'<j-2
-    e3, e3_type = math.inf, "BIFURCATION"
-    e3_ij: List[Tuple[int, int]] = []
-    for i_1 in range(i + 2, j - 2):
+    e3 = Struct(math.inf, "BIFURCATION")
+    for i_1 in range(i + 1, j - 1):
         e3_test, unpaired, helixes = _multi_branch(
-            seq, i + 1, i_1, j - 1, temp, v_cache, w_cache, emap, True
+            seq, i, i_1, j, temp, v_cache, w_cache, emap, True
         )
 
-        if e3_test != -math.inf and e3_test < e3:
-            e3 = e3_test
-            e3_ij = [(i + 1, i_1), (i_1 + 1, j - 1)]
-            e3_type = f"BIFURCATION:{str(unpaired)}n/{str(helixes)}h"
+        if e3_test != -math.inf and e3_test < e3.e:
+            e3 = Struct(
+                e3_test,
+                f"BIFURCATION:{str(unpaired)}n/{str(helixes)}h",
+                [(i + 1, i_1), (i_1 + 1, j - 1)],
+            )
 
-    e = _min_struct([(e1, e1_type, e1_ij), (e2, e2_type, e2_ij), (e3, e3_type, e3_ij)])
+    e = _min_struct(e1, e2, e3)
     v_cache[i][j] = e
     return e
 
 
-def _min_struct(structs: List[Struct]) -> Struct:
+def _min_struct(*structs: Struct) -> Struct:
     """Return the struct with the lowest free energy that isn't -inf (undef)
 
     Args:
@@ -314,9 +323,9 @@ def _min_struct(structs: List[Struct]) -> Struct:
         struct: The min free energy structure
     """
 
-    s: Struct = (math.inf, "", [])
+    s: Struct = Struct(math.inf)
     for struct in structs:
-        if struct[0] != -math.inf and struct[0] < s[0]:
+        if struct.e != -math.inf and struct.e < s.e:
             s = struct
     return s
 
@@ -341,7 +350,7 @@ def _j_s(query_len: int, known_len: int, d_g_x: float, temp: float) -> float:
 
     The Jacobson-Stockmayer entry extrapolation formula is used
     for bulges, hairpins, etc that fall outside the 30nt upper limit
-    for pre-calculated free-energies. See SantaLucia and Hicks (2014).
+    for pre-calculated free-energies. See SantaLucia and Hicks (2004).
 
     Args:
         query_len: Length of element without known free energy value
@@ -602,25 +611,25 @@ def _multi_branch(
         float: The energy of the multi-branch penalty
     """
 
-    e_left, e_ltype, e_lpairs = _w(seq, i, k, temp, v_cache, w_cache, emap)
-    e_right, e_rtype, e_rpairs = _w(seq, k + 1, j, temp, v_cache, w_cache, emap)
+    left = _w(seq, i, k, temp, v_cache, w_cache, emap)
+    right = _w(seq, k + 1, j, temp, v_cache, w_cache, emap)
 
     # at least three multi-loops here; Fig 2A
     helixes = 3 if helix else 2
-    if "BIFURCATION" in e_ltype:  # TODO: recurse to go higher
+    if len(left.ij) > 1:  # TODO: recurse to go higher
         helixes += 1
-    if "BIFURCATION" in e_rtype:
+    if len(right.ij) > 1:
         helixes += 1
 
     # add up the unpaired bp count
     unpaired = 0
     i2_1 = 0
-    if e_lpairs:
-        i2, i2_1 = e_lpairs[0]
+    if left.ij:
+        i2, i2_1 = left.ij[0]
         unpaired += i2 - i - 1
 
-    if e_rpairs:
-        i3, i3_1 = e_rpairs[0]
+    if right.ij:
+        i3, i3_1 = right.ij[0]
         unpaired += i3 - k - 2
         unpaired += j - i3_1 - 1
         if i2_1:
@@ -631,14 +640,12 @@ def _multi_branch(
     e_multibranch = a + b * unpaired + c * helixes
 
     # energy of min-energy neighbors
-    e = e_multibranch + e_left + e_right
+    e = e_multibranch + left.e + right.e
 
     return e, unpaired, helixes
 
 
-def _traceback(
-    i: int, j: int, v_cache: Cache, w_cache: Cache
-) -> List[Tuple[int, int, str, float]]:
+def _traceback(i: int, j: int, v_cache: Cache, w_cache: Cache) -> List[Struct]:
     """Traceback thru the V(i,j) and W(i,j) caches to find the structure
 
     For each step, get to the lowest energy W(i,j) within that block
@@ -654,43 +661,41 @@ def _traceback(
         w_cache: Energies/sub-structures between or with i and j
 
     Returns:
-        A list of pairs (i, j) and the type of structure enclosed
+        A list of Structs in the final secondary structure
     """
 
     # move i,j down-left to start coordinates
-    _, desc, ij = w_cache[i][j]
-    if "HAIRPIN" not in desc:
-        while w_cache[i + 1][j][2] == ij:
+    s = w_cache[i][j]
+    if "HAIRPIN" not in s.desc:
+        while w_cache[i + 1][j] == s:
             i += 1
-        while w_cache[i][j - 1][2] == ij:
+        while w_cache[i][j - 1] == s:
             j -= 1
 
-    structs: List[Tuple[int, int, str, float]] = []
+    structs: List[Struct] = []
     while True:
-        e, desc, ij = v_cache[i][j]
+        s = v_cache[i][j]
+        structs.append(s)
 
         # it's a hairpin, end of structure
-        if not ij:
+        if not s.ij:
             # set the energy of everything relative to the hairpin
-            structs.append((i, j, desc, e))
             return _trackback_energy(structs)
 
         # it's a stack, bulge, etc
         # there's another single structure beyond this
-        if len(ij) == 1:
-            structs.append((i, j, desc, e))
-            i, j = ij[0]
+        if len(s.ij) == 1:
+            i, j = s.ij[0]
             continue
 
         # it's a bifurcation
-        (i1, j1), (i2, j2) = ij
-        structs.append((i, j, desc, e))
+        (i1, j1), (i2, j2) = s.ij
 
         # next structure might not exist; Figure 2A
-        while v_cache[i1][j1][0] == math.inf:
+        while v_cache[i1][j1].e == math.inf:
             i1 += 1
 
-        while v_cache[i2][j2][0] == math.inf:
+        while v_cache[i2][j2].e == math.inf:
             i2 += 1
 
         structs = _trackback_energy(structs)
@@ -699,45 +704,37 @@ def _traceback(
 
         e_sum = 0.0
         if traceback_left:
-            left_i, left_j, _, _ = traceback_left[0]
-            e_sum += w_cache[left_i][left_j][0]
+            left_i, left_j = traceback_left[0].ij[0]
+            e_sum += w_cache[left_i][left_j].e
         if traceback_right:
-            right_i, right_j, _, _ = traceback_right[0]
-            e_sum += w_cache[right_i][right_j][0]
+            right_i, right_j = traceback_right[0].ij[0]
+            e_sum += w_cache[right_i][right_j].e
 
         if structs:
-            last_i, last_j, last_desc, last_e = structs[-1]
-            structs[-1] = (
-                last_i,
-                last_j,
-                last_desc,
-                round(last_e - e_sum, 2),
-            )
+            last = structs[-1]
+            structs[-1] = Struct(round(last.e - e_sum, 2), last.desc, list(last.ij))
 
         return structs + traceback_left + traceback_right
 
     return _trackback_energy(structs)
 
 
-def _trackback_energy(
-    structs: List[Tuple[int, int, str, float]]
-) -> List[Tuple[int, int, str, float]]:
+def _trackback_energy(structs: List[Struct]) -> List[Struct]:
     """Add energy to each structure, based on how it's W(i,j) differs from the one after
 
     Args:
         structs: The structures for whom energy is being calculated
 
     Returns:
-        List[Tuple[int, int, str, float]]: Structures in the folded DNA with energy
+        List[Struct]: Structures in the folded DNA with energy
     """
 
-    structs_e: List[Tuple[int, int, str, float]] = []
+    structs_e: List[Struct] = []
     for index, struct in enumerate(structs):
-        i, j, desc, e = struct
-        e_next = 0.0
-        if index < len(structs) - 1:
-            e_next = structs[index + 1][3]
-        structs_e.append((i, j, desc, round(e - e_next, 2)))
+        e_next = 0.0 if index == len(structs) - 1 else structs[index + 1].e
+        structs_e.append(
+            Struct(round(struct.e - e_next, 2), struct.desc, list(struct.ij))
+        )
     return structs_e
 
 

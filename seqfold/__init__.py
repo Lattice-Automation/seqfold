@@ -10,4 +10,4 @@ except DistributionNotFound:
 finally:
     del get_distribution, DistributionNotFound
 
-from .fold import calc_dg
+from .fold import calc_dg, Cache, Struct
