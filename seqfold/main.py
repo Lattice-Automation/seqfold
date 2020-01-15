@@ -5,23 +5,34 @@ import sys
 from typing import List
 
 from . import __version__
-from .fold import calc_dg, calc_dg_verbose
+from .fold import calc_dg, fold
 
 
 def run():
     """Entry point for console_scripts.
-
-    Simply fold the DNA and report the minimum free energy
     """
 
     args = parse_args(sys.argv[1:])
+    structs = fold(args.seq, temp=args.temp)
 
     if args.verbose:
-        dg, desc = calc_dg_verbose(args.seq, temp=args.temp)
-        print(desc)
-        print(dg)
-    else:
-        print(calc_dg(args.seq, temp=args.temp))
+        # log structure with dot-bracket notation
+        desc = ["."] * len(args.seq)
+        for s in structs:
+            if len(s.ij) == 1:
+                i, j = s.ij[0]
+                desc[i - 1] = "("
+                desc[j + 1] = ")"
+        print(args.seq)
+        print("".join(desc))
+
+    if args.log:
+        # log each structure
+        for s in structs:
+            print(s)
+
+    # log free energy
+    print(round(sum(s.e for s in structs), 2))
 
 
 def parse_args(args: List[str]) -> argparse.Namespace:
@@ -54,6 +65,9 @@ def parse_args(args: List[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="log a 2D folding description",
+    )
+    parser.add_argument(
+        "-l", "--log", action="store_true", help="log each structure",
     )
     parser.add_argument(
         "--version", action="version", version="seqfold {ver}".format(ver=__version__),

@@ -25,9 +25,9 @@ calc_dg("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC", temp = 37.0)  # -12
 
 ```bash
 $ seqfold TAGCTCAGCTGGGAGAGCGCCTGCTTTGCACGCAGGAGGT -t 32 -v
----------------/-/-/////-------\\\\\-\-\
+-----------------(-(((((-------)))))-)--
 TAGCTCAGCTGGGAGAGCGCCTGCTTTGCACGCAGGAGGT
--6.58
+-5.87
 ```
 
 ### Notes

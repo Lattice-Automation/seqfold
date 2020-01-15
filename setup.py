@@ -30,10 +30,8 @@ setup(
     ext_modules=cythonize(
         "seqfold/*.py*",
         compiler_directives={
-            "binding": True,
             "boundscheck": False,
             "initializedcheck": False,
-            "infer_types": True,
             "language_level": "3str",
             "nonecheck": False,
             "overflowcheck": False,
