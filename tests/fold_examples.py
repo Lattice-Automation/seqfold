@@ -8,7 +8,7 @@ print(seqfold.__file__)
 
 DIR = path.dirname(path.realpath(__file__))
 
-ufold_dna = {
+DNA_EXAMPLES = {
     "GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC": -10.94,  # three branched structure
     "GGGAGGTCGCTCCAGCTGGGAGGAGCGTTGGGGGTATATACCCCCAACACCGGTACTGATCCGGTGACCTCCC": -23.4,  # four branched structure
     "CGCAGGGAUACCCGCG": -3.8,
@@ -22,7 +22,7 @@ ufold_dna = {
 # writing results to examples for comparison
 DNA_RESULTS = {}
 
-for seq, ufold in ufold_dna.items():
+for seq, ufold in DNA_EXAMPLES.items():
     ss = fold(seq, temp=37.0)
     dg = round(sum(s.e for s in ss), 2)
     DNA_RESULTS[seq] = (dg, ufold)
@@ -35,7 +35,7 @@ with open(path.join(DIR, "..", "examples", "dna.csv"), "w") as ex:
         ex.write(",".join([str(sf), str(uf), seq]) + "\n")
 
 
-ufold_rna = {
+RNA_EXAMPLES = {
     "ACCCCCUCCUUCCUUGGAUCAAGGGGCUCAA": -9.5,
     "AAGGGGUUGGUCGCCUCGACUAAGCGGCUUGGAAUUCC": -10.1,
     "UUGGAGUACACAACCUGUACACUCUUUC": -4.3,
@@ -51,7 +51,7 @@ ufold_rna = {
 # writing results to examples for comparison
 RNA_RESULTS = {}
 
-for seq, ufold in ufold_rna.items():
+for seq, ufold in RNA_EXAMPLES.items():
     dg = calc_dg(seq, temp=37.0)
     RNA_RESULTS[seq] = (dg, ufold)
 
