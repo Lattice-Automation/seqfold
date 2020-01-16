@@ -22,10 +22,16 @@ class Struct:
         return self.e == other.e and self.ij == other.ij
 
     def __str__(self) -> str:
-        return str(f"{str(self.ij)} {str(round(self.e, 2))} {self.desc} ")
+        i = self.ij[0][0] if self.ij else ""
+        j = self.ij[0][1] if self.ij else ""
+        e = str(self.e)
+        return "{:>4} {:>4} {:>7} {:>15}".format(i, j, e, self.desc)
 
     def __nonzero__(self) -> bool:
         return self.e != math.inf and self.e != -math.inf
+
+    def with_ij(self, ij: List[Tuple[int, int]]):
+        return Struct(self.e, self.desc, ij)
 
 
 STRUCT_DEFAULT = Struct(-math.inf)
@@ -100,7 +106,7 @@ def fold(seq: str, temp: float = 37.0) -> List[Struct]:
         w_cache.append([STRUCT_DEFAULT] * n)
 
     # fill the cache
-    e = _w(seq, 0, n - 1, temp, v_cache, w_cache, emap).e
+    _w(seq, 0, n - 1, temp, v_cache, w_cache, emap)
 
     # get the structure out of the cache
     # _debug(v_cache, w_cache)
@@ -147,7 +153,7 @@ def _w(
     for k in range(i + 1, j - 1):
         w4_test = _multi_branch(seq, i, k, j, temp, v_cache, w_cache, emap, False)
 
-        if w4_test and w4_test.e < w4.e:
+        if w4_test != STRUCT_NULL and w4_test.e < w4.e:
             w4 = w4_test
 
     w = _min_struct(w1, w2, w3, w4)
@@ -268,12 +274,11 @@ def _v(
 
     # E3 = min{W(i+1,i') + W(i'+1,j-1)}, i+1<i'<j-2
     e3 = Struct(math.inf, "BIFURCATION")
-    if not isolated_outer:
-        for k in range(i + 1, j - 1):
-            e3_test = _multi_branch(seq, i, k, j, temp, v_cache, w_cache, emap, True)
+    for k in range(i + 1, j - 1):
+        e3_test = _multi_branch(seq, i, k, j, temp, v_cache, w_cache, emap, True)
 
-            if e3_test != STRUCT_NULL and e3_test.e < e3.e:
-                e3 = e3_test
+        if e3_test != STRUCT_NULL and e3_test.e < e3.e:
+            e3 = e3_test
 
     e = _min_struct(e1, e2, e3)
     v_cache[i][j] = e
@@ -620,7 +625,7 @@ def _multi_branch(
     branches: List[Tuple[int, int]] = []
 
     def add_branch(s: Struct):
-        if not s or not s.ij:
+        if s == STRUCT_NULL or not s.ij:
             return
         if len(s.ij) == 1:
             branches.append(s.ij[0])
@@ -641,42 +646,40 @@ def _multi_branch(
 
     # count up unpaired bp and asymmetry
     branches_count = len(branches)
-    unpaired, asy_diff = 0, 0
+    unpaired = 0
     e_sum = 0.0
     for index, (i2, j2) in enumerate(branches):
-        _, j1 = branches[(index - 1) % len(branches)]
         i3, j3 = branches[(index + 1) % len(branches)]
 
         # asymmetry on either side, unpaired bp
-        asy_left, asy_right = 0, 0
-        if (i3, j3) == (i, j):
-            asy_left = i2 - j1 - 1
-            asy_right = j3 - j2 - 1
+        if index == len(branches) - 1 and not helix:
+            pass
+        elif (i3, j3) == (i, j):
+            unpaired += j3 - j2 - 1
         elif (i2, j2) == (i, j):
-            asy_left = j2 - j1 - 1
-            asy_right = i3 - i2 - 1
+            unpaired += i3 - i2 - 1
         else:
-            asy_left = i2 - j1 - 1
-            asy_right = i3 - j2 - 1
+            unpaired += i3 - j2 - 1
 
-        unpaired += asy_right
-        asy_diff += abs(asy_left - asy_right)
+        if unpaired < 0:
+            raise RuntimeError(i, j, (i2, j2), (i3, j3), index, len(branches))
 
-        if (i2, j2) != (i, j):  # add energy, ignore helix
+        if (i2, j2) != (i, j):  # add energy
             e_sum += _w(seq, i2, j2, temp, v_cache, w_cache, emap).e
+
+    assert unpaired >= 0
 
     # penalty for unmatched bp and multi-branch
     a, b, c = emap.MULTIBRANCH
-    e_multibranch = (
-        a + b * min(2.0, float(asy_diff) / len(branches)) + c * len(branches)
-    )
+    e_multibranch = a + b * len(branches) + c * unpaired
 
     # energy of min-energy neighbors
     e = e_multibranch + e_sum
 
-    return Struct(
-        e, f"BIFURCATION:{str(unpaired)}n/{str(branches_count)}h", [(i, k), (k + 1, j)]
-    )
+    # pointer to next struct
+    ij = [(i, k), (k + 1, j)] if not helix else [(i + 1, k), (k + 1, j - 1)]
+
+    return Struct(e, f"BIFURCATION:{str(unpaired)}n/{str(branches_count)}h", ij)
 
 
 def _traceback(i: int, j: int, v_cache: Cache, w_cache: Cache) -> List[Struct]:
@@ -709,7 +712,7 @@ def _traceback(i: int, j: int, v_cache: Cache, w_cache: Cache) -> List[Struct]:
     structs: List[Struct] = []
     while True:
         s = v_cache[i][j]
-        structs.append(s)
+        structs.append(s.with_ij([(i, j)]))
 
         # it's a hairpin, end of structure
         if not s.ij:
@@ -737,15 +740,15 @@ def _traceback(i: int, j: int, v_cache: Cache, w_cache: Cache) -> List[Struct]:
         traceback_right = _traceback(i2, j2, v_cache, w_cache)
 
         e_sum = 0.0
-        if traceback_left:
+        if traceback_left and traceback_left[0].ij:
             left_i, left_j = traceback_left[0].ij[0]
             e_sum += w_cache[left_i][left_j].e
-        if traceback_right:
+        if traceback_right and traceback_right[0].ij:
             right_i, right_j = traceback_right[0].ij[0]
             e_sum += w_cache[right_i][right_j].e
 
-            last = structs[-1]
-            structs[-1] = Struct(round(last.e - e_sum, 2), last.desc, list(last.ij))
+        last = structs[-1]
+        structs[-1] = Struct(round(last.e - e_sum, 2), last.desc, list(last.ij))
         return structs + traceback_left + traceback_right
 
     return _trackback_energy(structs)

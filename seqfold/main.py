@@ -21,8 +21,8 @@ def run():
         for s in structs:
             if len(s.ij) == 1:
                 i, j = s.ij[0]
-                desc[i - 1] = "("
-                desc[j + 1] = ")"
+                desc[i] = "("
+                desc[j] = ")"
         print(args.seq)
         print("".join(desc))
 

@@ -7,7 +7,7 @@ from .types import Comp, MultiBranch, BpEnergy, LoopEnergy, Energies
 
 DNA_COMPLEMENT: Comp = {"A": "T", "T": "A", "G": "C", "C": "G", "N": "N"}
 
-DNA_MULTIBRANCH: MultiBranch = (4.6, 0.4, 0.1)
+DNA_MULTIBRANCH: MultiBranch = (4.5, 0.2, 0.2)
 """a, b and c in a linear multi-branch energy change function."""
 
 DNA_NN: BpEnergy = {

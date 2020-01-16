@@ -6,7 +6,7 @@ from .types import Comp, MultiBranch, BpEnergy, LoopEnergy, Energies
 
 RNA_COMPLEMENT: Comp = {"A": "U", "U": "A", "G": "C", "C": "G", "N": "N"}
 
-RNA_MULTIBRANCH: MultiBranch = (9.3, 0.91, -0.63)
+RNA_MULTIBRANCH: MultiBranch = (9.3, -0.6, 0)
 
 RNA_NN: BpEnergy = {
     "AA/UU": (-6.8, -19.0),

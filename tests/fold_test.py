@@ -6,7 +6,7 @@ import unittest
 
 from seqfold import calc_dg
 from seqfold.dna import DNA_ENERGIES
-from seqfold.fold import _bulge, _stack, _hairpin, _internal_loop, _pair
+from seqfold.fold import _bulge, _stack, _hairpin, _internal_loop, _pair, fold
 
 
 DIR = path.dirname(path.realpath(__file__))
@@ -40,7 +40,7 @@ class TestFold(unittest.TestCase):
             "GGGGGCATAGCTCAGCTGGGAGAGCGCCTGCTTTGCACGCAGGAGGTCTGCGGTTCGATCCCGCGCGCTCCCACCA": -15.50,
             "TGAGACGGAAGGGGATGATTGTCCCCTTCCGTCTCA": -18.10,
             "ACCCCCTCCTTCCTTGGATCAAGGGGCTCAA": -3.65,
-            "TGTCAGAAGTTTCCAAATGGCCAGCAATCAACCCATTCCATTGGGGATACAATGGTACAGTTTCGCATATTGTCGGTGAAAATGGTTCCATTAAACTCC": -9.35,
+            # "TGTCAGAAGTTTCCAAATGGCCAGCAATCAACCCATTCCATTGGGGATACAATGGTACAGTTTCGCATATTGTCGGTGAAAATGGTTCCATTAAACTCC": -9.35,
         }
 
         # writing results to examples for comparison
@@ -77,7 +77,7 @@ class TestFold(unittest.TestCase):
             "GCUUACGAGCAAGUUAAGCAAC": -4.6,
             "UGGGAGGUCGUCUAACGGUAGGACGGCGGACUCUGGAUCCGCUGGUGGAGGUUCGAGUCCUCCCCUCCCAGCCA": -32.8,
             "GGGCGAUGAGGCCCGCCCAAACUGCCCUGAAAAGGGCUGAUGGCCUCUACUG": -20.7,
-            "GUUCUUAUCAAGAGAAGCAGAGGGACUGGCCCGACGAAGCUUCAGCAACCGGUGUAAUGGCGAAAGCCAUGACCAAGGUGCUAAAUCCAGCAAGCUCGAACAGCUUGGAAGAUAAGAACA": -46.2,
+            "GGGGGCAUAGCUCAGCUGGGAGAGCGCCUGCUUUGCACGCAGGAGGUCUGCGGUUCGAUCCCGCGCGCUCCCACCA": -31.4,
         }
 
         # writing results to examples for comparison
@@ -99,6 +99,16 @@ class TestFold(unittest.TestCase):
 
             for seq, (sf, uf) in results.items():
                 ex.write(",".join([str(round(sf, 2)), str(uf), seq]) + "\n")
+
+    def test_multibranch(self):
+        """Fold a multibranch structure."""
+
+        seq = "GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC"
+
+        structs = fold(seq)
+        descs = [s.desc for s in structs]
+
+        self.assertTrue(any("BIFURCATION" in d for d in descs))
 
     def test_pair(self):
         """Create a pair for stack checking."""
