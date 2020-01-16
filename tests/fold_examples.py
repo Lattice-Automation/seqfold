@@ -2,6 +2,10 @@ from os import path
 
 from seqfold.fold import calc_dg, fold
 
+import seqfold
+
+print(seqfold.__file__)
+
 DIR = path.dirname(path.realpath(__file__))
 
 ufold_dna = {
