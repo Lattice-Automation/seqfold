@@ -23,7 +23,7 @@ setup(
     author="JJTimmons",
     author_email="jtimmons@latticeautomation.com",
     license="mit",
-    packages=find_packages(where="seqfold", exclude=["data"]),
+    packages=find_packages(),
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/Lattice-Automation/seqfold",
@@ -36,6 +36,6 @@ setup(
     ],
     entry_points={"console_scripts": ["seqfold=seqfold.main:run"],},
     zip_safe=False,
-    extra_require={"dev": ["black", "pylint"]},
+    extra_require={"dev": ["black", "pylint", "bumpversion"]},
     python_requires=">=3.0",
 )
