@@ -6,5 +6,5 @@ from .types import Comp, MultiBranch, BpEnergy, LoopEnergy, Energies
 
 RNA_COMPLEMENT: Comp = {"A": "U", "U": "A", "G": "C", "C": "G", "N": "N"}
 
-RNA_MULTIBRANCH: MultiBranch = (9.3, -0.6, 0)
+RNA_MULTIBRANCH: MultiBranch = (2.5, 0.1, 0.4, 2.0)
 

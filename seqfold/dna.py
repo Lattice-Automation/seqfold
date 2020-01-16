@@ -7,8 +7,15 @@ from .types import Comp, MultiBranch, BpEnergy, LoopEnergy, Energies
 
 DNA_COMPLEMENT: Comp = {"A": "T", "T": "A", "G": "C", "C": "G", "N": "N"}
 
-DNA_MULTIBRANCH: MultiBranch = (4.5, 0.2, 0.2)
-"""a, b and c in a linear multi-branch energy change function."""
+DNA_MULTIBRANCH: MultiBranch = (2.6, 0.2, 0.2, 2.0)
+"""a, b, c, d in a linear multi-branch energy change function.
+
+Inferred from:
+Supplemental Material: Annu.Rev.Biophs.Biomol.Struct.33:415-40
+doi: 10.1146/annurev.biophys.32.110601.141800
+The Termodynamicso f DNA Structural Motifs
+SantaLucia and Hicks, 2004
+"""
 
 DNA_NN: BpEnergy = {
     "init": (0.2, -5.7),

@@ -6,10 +6,19 @@ import unittest
 
 from seqfold import calc_dg
 from seqfold.dna import DNA_ENERGIES
-from seqfold.fold import _bulge, _stack, _hairpin, _internal_loop, _pair, fold
-
-
-DIR = path.dirname(path.realpath(__file__))
+from seqfold.rna import RNA_ENERGIES
+from seqfold.fold import (
+    fold,
+    STRUCT_DEFAULT,
+    Cache,
+    _bulge,
+    _stack,
+    _hairpin,
+    _internal_loop,
+    _pair,
+    _w,
+    _traceback,
+)
 
 
 class TestFold(unittest.TestCase):
@@ -35,16 +44,13 @@ class TestFold(unittest.TestCase):
         # unafold's estimates for free energy estimates of DNA oligos
         unafold_dgs = {
             "GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC": -10.94,  # three branched structure
+            "GGGAGGTCGCTCCAGCTGGGAGGAGCGTTGGGGGTATATACCCCCAACACCGGTACTGATCCGGTGACCTCCC": -23.4,  # four branched structure
             "CGCAGGGAUACCCGCG": -3.8,
             "TAGCTCAGCTGGGAGAGCGCCTGCTTTGCACGCAGGAGGT": -6.85,
             "GGGGGCATAGCTCAGCTGGGAGAGCGCCTGCTTTGCACGCAGGAGGTCTGCGGTTCGATCCCGCGCGCTCCCACCA": -15.50,
             "TGAGACGGAAGGGGATGATTGTCCCCTTCCGTCTCA": -18.10,
             "ACCCCCTCCTTCCTTGGATCAAGGGGCTCAA": -3.65,
-            # "TGTCAGAAGTTTCCAAATGGCCAGCAATCAACCCATTCCATTGGGGATACAATGGTACAGTTTCGCATATTGTCGGTGAAAATGGTTCCATTAAACTCC": -9.35,
         }
-
-        # writing results to examples for comparison
-        results = {}
 
         for seq, ufold in unafold_dgs.items():
             dg = calc_dg(seq, temp=37.0)
@@ -52,16 +58,6 @@ class TestFold(unittest.TestCase):
             # accepting a 50% difference
             delta = abs(0.5 * min(dg, ufold))
             self.assertAlmostEqual(dg, ufold, delta=delta)
-
-            # save result
-            results[seq] = (dg, ufold)
-
-        # save results to examples
-        with open(path.join(DIR, "..", "examples", "dna.csv"), "w") as ex:
-            ex.write("seqfold,UNAFold,seq\n")
-
-            for seq, (sf, uf) in results.items():
-                ex.write(",".join([str(round(sf, 2)), str(uf), seq]) + "\n")
 
     def test_fold_rna(self):
         """RNA folding to find min energy secondary structure."""
@@ -72,16 +68,12 @@ class TestFold(unittest.TestCase):
             "ACCCCCUCCUUCCUUGGAUCAAGGGGCUCAA": -9.5,
             "AAGGGGUUGGUCGCCUCGACUAAGCGGCUUGGAAUUCC": -10.1,
             "UUGGAGUACACAACCUGUACACUCUUUC": -4.3,
-            "UGCCUGGCGGCCGUAGCGCGGUGGUCCCACCUGACCCCAUGCCGAACUCAGAAGUGAAACGCCGUAGCGCCGAUGGUAGUGUGGGGUCUCCCCAUGCGAGAGUAGGGAACUGCCAGGCAU": -54.9,
             "AGGGAAAAUCCC": -3.3,
             "GCUUACGAGCAAGUUAAGCAAC": -4.6,
             "UGGGAGGUCGUCUAACGGUAGGACGGCGGACUCUGGAUCCGCUGGUGGAGGUUCGAGUCCUCCCCUCCCAGCCA": -32.8,
             "GGGCGAUGAGGCCCGCCCAAACUGCCCUGAAAAGGGCUGAUGGCCUCUACUG": -20.7,
             "GGGGGCAUAGCUCAGCUGGGAGAGCGCCUGCUUUGCACGCAGGAGGUCUGCGGUUCGAUCCCGCGCGCUCCCACCA": -31.4,
         }
-
-        # writing results to examples for comparison
-        results = {}
 
         for seq, ufold in unafold_dgs.items():
             dg = calc_dg(seq, temp=37.0)
@@ -90,25 +82,16 @@ class TestFold(unittest.TestCase):
             delta = abs(0.5 * min(dg, ufold))
             self.assertAlmostEqual(dg, ufold, delta=delta)
 
-            # save result
-            results[seq] = (dg, ufold)
-
-        # save results to examples
-        with open(path.join(DIR, "..", "examples", "rna.csv"), "w") as ex:
-            ex.write("seqfold,UNAFold,seq\n")
-
-            for seq, (sf, uf) in results.items():
-                ex.write(",".join([str(round(sf, 2)), str(uf), seq]) + "\n")
-
     def test_multibranch(self):
         """Fold a multibranch structure."""
 
-        seq = "GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC"
+        seq = "GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC"  # three branch
 
         structs = fold(seq)
-        descs = [s.desc for s in structs]
 
-        self.assertTrue(any("BIFURCATION" in d for d in descs))
+        self.assertTrue(
+            any("BIFURCATION" in s.desc and (7, 41) in s.ij for s in structs)
+        )
 
     def test_pair(self):
         """Create a pair for stack checking."""
@@ -116,6 +99,16 @@ class TestFold(unittest.TestCase):
         seq = "ATGGAATAGTG"
 
         self.assertEqual(_pair(seq, 0, 1, 9, 10), "AT/TG")
+
+    def test_stack(self):
+        """Calc delta G of a stack."""
+
+        seq = "GCUCAGCUGGGAGAGC"
+        temp = 310.15
+
+        self.assertAlmostEqual(
+            _stack(seq, 1, 2, 14, 13, temp, RNA_ENERGIES), -2.1, delta=0.1
+        )
 
     def test_bulge(self):
         """Calc delta G calc of a bulge."""
@@ -147,6 +140,12 @@ class TestFold(unittest.TestCase):
         hairpin_dg = _hairpin(seq, i, j, temp, DNA_ENERGIES)
         self.assertAlmostEqual(0.67, hairpin_dg, delta=0.1)
 
+        seq = "CUUUGCACG"
+        i = 0
+        j = 8
+        hairpin_dg = _hairpin(seq, i, j, temp, RNA_ENERGIES)
+        self.assertAlmostEqual(4.5, hairpin_dg, delta=0.2)
+
     def test_internal_loop(self):
         """Calc dg of an internal loop."""
 
@@ -154,7 +153,62 @@ class TestFold(unittest.TestCase):
         i = 6
         j = 21
         temp = 310.15
+        dg = _internal_loop(seq, i, i + 4, j, j - 4, temp, DNA_ENERGIES)
+        self.assertAlmostEqual(dg, 3.5, delta=0.1)
 
-        loop_temp = _internal_loop(seq, i, i + 4, j, j - 4, temp, DNA_ENERGIES)
+    def test_w(self):
+        """Calculate _w over some range."""
 
-        self.assertAlmostEqual(loop_temp, 3.5, delta=0.1)
+        seq = "GCUCAGCUGGGAGAGC"
+        i = 0
+        j = 15
+        temp = 310.15
+        v_cache = []
+        w_cache = []
+        for _ in range(len(seq)):
+            v_cache.append([STRUCT_DEFAULT] * len(seq))
+            w_cache.append([STRUCT_DEFAULT] * len(seq))
+        struct = _w(seq, i, j, temp, v_cache, w_cache, RNA_ENERGIES)
+
+        self.assertAlmostEqual(struct.e, -3.8, delta=0.2)
+
+        seq = "CCUGCUUUGCACGCAGG"
+        i = 0
+        j = 16
+        temp = 310.15
+        v_cache = []
+        w_cache = []
+        for _ in range(len(seq)):
+            v_cache.append([STRUCT_DEFAULT] * len(seq))
+            w_cache.append([STRUCT_DEFAULT] * len(seq))
+        struct = _w(seq, i, j, temp, v_cache, w_cache, RNA_ENERGIES)
+
+        self.assertAlmostEqual(struct.e, -6.4, delta=0.2)
+
+        seq = "GCGGUUCGAUCCCGC"
+        i = 0
+        j = 14
+        v_cache = []
+        w_cache = []
+        for _ in range(len(seq)):
+            v_cache.append([STRUCT_DEFAULT] * len(seq))
+            w_cache.append([STRUCT_DEFAULT] * len(seq))
+        struct = _w(seq, i, j, temp, v_cache, w_cache, RNA_ENERGIES)
+        self.assertAlmostEqual(struct.e, -4.2, delta=0.2)
+
+    def _debug(self, cache: Cache):
+        """Log the contents of a Cache."""
+
+        rows = []
+        for row in cache:
+            rows.append(
+                ",".join(str(s.ij).replace(",", "-") if s else "." for s in row)
+            )
+        rows.append("")
+        for row in cache:
+            rows.append(",".join(str(s.e) if s else "." for s in row))
+        rows.append("")
+        for row in cache:
+            rows.append(",".join(str(s.desc) if s else "." for s in row))
+        print("\n".join(rows))
+

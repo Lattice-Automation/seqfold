@@ -5,7 +5,7 @@ from typing import Dict, Optional, Tuple, Union
 
 
 Comp = Dict[str, str]
-MultiBranch = Tuple[float, float, float]
+MultiBranch = Tuple[float, float, float, float]
 BpEnergy = Dict[str, Tuple[float, float]]
 LoopEnergy = Dict[int, Tuple[float, float]]
 

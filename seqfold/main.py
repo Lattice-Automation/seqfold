@@ -5,7 +5,7 @@ import sys
 from typing import List
 
 from . import __version__
-from .fold import calc_dg, fold
+from .fold import calc_dg, fold, Struct
 
 
 def run():
@@ -28,6 +28,7 @@ def run():
 
     if args.log:
         # log each structure
+        print(Struct.fmt.format("i", "j", "dg", "description"))
         for s in structs:
             print(s)
 
