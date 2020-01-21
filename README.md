@@ -45,12 +45,14 @@ optional arguments:
   --version      show program's version number and exit
 ```
 
-#### Example
+#### Examples
 
 ```bash
 $ seqfold GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC -t 32
 -17.1
-$
+```
+
+```bash
 $ seqfold GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC -t 32 -v -l
 GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC
 ((((((((.((((......))))..((((.......)))).))))))))
