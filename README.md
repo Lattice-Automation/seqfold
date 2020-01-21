@@ -15,18 +15,62 @@ pip install seqfold
 ### Python
 
 ```python
-from seqfold import calc_dg
+from seqfold import calc_dg, fold, Struct
 
-# a bifurcated DNA structure
+# just returns minimum free energy
 calc_dg("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC", temp = 37.0)  # -12.94
+
+# returns a list of `seqfold.Struct` from the minimum free energy structure
+structs: List[Struct] = fold("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC")
+print(sum(s.e for s in structs))  # -12.94; same as calc_dg()
+for struct in structs:
+    print(struct) # prints the i, j, dg, and description of each structure
 ```
 
 ### CLI
 
+```txt
+usage: seqfold [-h] [-t FLOAT] [-v] [-l] [--version] SEQ
+
+Predict the minimum free energy (kcal/mol) of a nucleic acid sequence
+
+positional arguments:
+  SEQ            nucleic acid sequence to fold
+
+optional arguments:
+  -h, --help     show this help message and exit
+  -t FLOAT       temperature in Celcius
+  -v, --verbose  log a 2D folding description
+  -l, --log      log each structure
+  --version      show program's version number and exit
+```
+
+#### Example
+
 ```bash
-$ seqfold seqfold GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC -t 32 -v
+$ seqfold GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC -t 32
+-17.1
+$
+$ seqfold GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC -t 32 -v -l
 GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC
 ((((((((.((((......))))..((((.......)))).))))))))
+   i    j     dg  description
+   0   48   -2.2  STACK:GG/CC
+   1   47   -2.2  STACK:GG/CC
+   2   46   -1.4  STACK:GA/CT
+   3   45   -1.4  STACK:AG/TC
+   4   44   -2.2  STACK:GG/CC
+   5   43   -1.6  STACK:GT/CA
+   6   42   -1.4  STACK:TC/AG
+   7   41   -0.5  BIFURCATION:4n/3h
+   9   22   -1.1  STACK:TT/AA
+  10   21   -1.0  STACK:TA/AT
+  11   20   -1.6  STACK:AC/TG
+  12   19    3.0  HAIRPIN:CA/GG
+  25   39   -2.2  STACK:CC/GG
+  26   38   -2.3  STACK:CG/GC
+  27   37   -2.2  STACK:GG/CC
+  28   36    3.2  HAIRPIN:GT/CT
 -17.1
 ```
 
