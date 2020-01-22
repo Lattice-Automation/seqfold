@@ -11,12 +11,12 @@ parse:
 	black ./seqfold/rna.py
 
 patch: test
-	bumpversion patch
+	source ~/.bash_profile && bumpversion patch
 	python3 setup.py sdist bdist_wheel
 	python3 -m twine upload dist/* --skip-existing
 
 minor: test
-	bumpversion minor
+	source ~/.bash_profile && bumpversion minor
 	python3 setup.py sdist bdist_wheel
 	python3 -m twine upload dist/* --skip-existing
 
