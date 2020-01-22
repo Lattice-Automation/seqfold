@@ -4,7 +4,7 @@ from os import path
 from time import time
 import unittest
 
-from seqfold import calc_dg, fold, fold_cache, traceback, Cache, Struct
+from seqfold import dg, fold, cache, traceback, Cache, Struct
 from seqfold.dna import DNA_ENERGIES
 from seqfold.rna import RNA_ENERGIES
 from seqfold.fold import (
@@ -26,21 +26,21 @@ class TestFold(unittest.TestCase):
 
         # it should throw if a nonsense sequence is provided
         with self.assertRaises(RuntimeError):
-            calc_dg("EASFEASFAST", 37.0)
+            dg("EASFEASFAST", 37.0)
 
         # Both U and T, mix of RNA and DNA
         with self.assertRaises(RuntimeError):
-            calc_dg("ATGCATGACGATUU", 37.0)
+            dg("ATGCATGACGATUU", 37.0)
 
         # should not throw
-        calc_dg("ATGGATTTAGATAGAT")
+        dg("ATGGATTTAGATAGAT")
 
     def test_fold_cache(self):
         """Gather a cache of the folded structure."""
 
         seq = "ATGGATTTAGATAGAT"
-        v_cache, w_cache = fold_cache(seq)
-        seq_dg = calc_dg(seq)
+        v_cache, w_cache = cache(seq)
+        seq_dg = dg(seq)
 
         self.assertEqual(
             seq_dg, sum(s.e for s in traceback(0, len(seq) - 1, v_cache, w_cache))
@@ -61,11 +61,11 @@ class TestFold(unittest.TestCase):
         }
 
         for seq, ufold in unafold_dgs.items():
-            dg = calc_dg(seq, temp=37.0)
+            d = dg(seq, temp=37.0)
 
             # accepting a 50% difference
-            delta = abs(0.5 * min(dg, ufold))
-            self.assertAlmostEqual(dg, ufold, delta=delta)
+            delta = abs(0.5 * min(d, ufold))
+            self.assertAlmostEqual(d, ufold, delta=delta)
 
     def test_fold_rna(self):
         """RNA folding to find min energy secondary structure."""
@@ -84,11 +84,11 @@ class TestFold(unittest.TestCase):
         }
 
         for seq, ufold in unafold_dgs.items():
-            dg = calc_dg(seq, temp=37.0)
+            d = dg(seq, temp=37.0)
 
             # accepting a 5% difference
-            delta = abs(0.5 * min(dg, ufold))
-            self.assertAlmostEqual(dg, ufold, delta=delta)
+            delta = abs(0.5 * min(d, ufold))
+            self.assertAlmostEqual(d, ufold, delta=delta)
 
     def test_multibranch(self):
         """Fold a multibranch structure."""

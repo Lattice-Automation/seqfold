@@ -15,10 +15,10 @@ pip install seqfold
 ### Python
 
 ```python
-from seqfold import calc_dg, fold, Struct
+from seqfold import dg, fold, Struct
 
 # just returns minimum free energy
-calc_dg("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC", temp = 37.0)  # -12.94
+dg("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC", temp = 37.0)  # -12.94
 
 # returns a list of `seqfold.Struct` from the minimum free energy structure
 structs: List[Struct] = fold("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC")
@@ -39,8 +39,8 @@ positional arguments:
 
 optional arguments:
   -h, --help     show this help message and exit
-  -t FLOAT       temperature in Celcius
-  -v, --verbose  log a 2D folding description
+  -t FLOAT       temperature in Celsius
+  -v, --verbose  log a 2D dot-bracket structure
   -l, --log      log each structure
   --version      show program's version number and exit
 ```

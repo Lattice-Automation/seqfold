@@ -44,7 +44,7 @@ Cache = List[List[Struct]]
 """A map from i, j tuple to a value."""
 
 
-def fold_cache(seq: str, temp: float = 37.0) -> Tuple[Cache, Cache]:
+def cache(seq: str, temp: float = 37.0) -> Tuple[Cache, Cache]:
     """Fold a nucleic acid sequence and return the w_cache.
 
     The Cache is useful for gathering many possible energies
@@ -116,14 +116,14 @@ def fold(seq: str, temp: float = 37.0) -> List[Struct]:
         List[Struct]: A list of structures. Stacks, bulges, hairpins, etc.
     """
 
-    v_cache, w_cache = fold_cache(seq, temp)
+    v_cache, w_cache = cache(seq, temp)
     n = len(seq)
 
     # get the minimum free energy structure out of the cache
     return traceback(0, n - 1, v_cache, w_cache)
 
 
-def calc_dg(seq: str, temp: float = 37.0) -> float:
+def dg(seq: str, temp: float = 37.0) -> float:
     """Fold the sequence and return just the delta G of the structure
 
     Args:

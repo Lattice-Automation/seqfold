@@ -5,7 +5,7 @@ import sys
 from typing import List
 
 from . import __version__
-from .fold import calc_dg, fold, Struct
+from .fold import dg, fold, Struct
 
 
 def run():
@@ -62,10 +62,10 @@ def parse_args(args: List[str]) -> argparse.Namespace:
         type=float,
         metavar="FLOAT",
         default=37.0,
-        help="temperature in Celcius",
+        help="temperature in Celsius",
     )
     parser.add_argument(
-        "-v", "--verbose", action="store_true", help="log a 2D folding description",
+        "-v", "--verbose", action="store_true", help="log a 2D dot-bracket structure",
     )
     parser.add_argument(
         "-l", "--log", action="store_true", help="log each structure",
