@@ -60,6 +60,10 @@ def fold_cache(seq: str, temp: float = 37.0) -> Tuple[Cache, Cache]:
         (Cache, Cache): The w_cache and the v_cache for traversal later
     """
 
+    # if it's a SeqRecord, gather just the seq
+    if "SeqRecord" in str(type(seq)):
+        seq = str(seq.seq)  # type: ignore
+
     seq = seq.upper()
     temp = temp + 273.15  # kelvin
 
