@@ -4,20 +4,17 @@ from os import path
 from time import time
 import unittest
 
-from seqfold import calc_dg
+from seqfold import calc_dg, fold, fold_cache, traceback, Cache, Struct
 from seqfold.dna import DNA_ENERGIES
 from seqfold.rna import RNA_ENERGIES
 from seqfold.fold import (
-    fold,
     STRUCT_DEFAULT,
-    Cache,
     _bulge,
     _stack,
     _hairpin,
     _internal_loop,
     _pair,
     _w,
-    _traceback,
 )
 
 
@@ -25,9 +22,9 @@ class TestFold(unittest.TestCase):
     """Test folding functions"""
 
     def test_fold(self):
-        """Test fold function."""
+        """Fold function."""
 
-        # it should throw if a non-sense sequence is provided
+        # it should throw if a nonsense sequence is provided
         with self.assertRaises(RuntimeError):
             calc_dg("EASFEASFAST", 37.0)
 
@@ -37,6 +34,17 @@ class TestFold(unittest.TestCase):
 
         # should not throw
         calc_dg("ATGGATTTAGATAGAT")
+
+    def test_fold_cache(self):
+        """Gather a cache of the folded structure."""
+
+        seq = "ATGGATTTAGATAGAT"
+        v_cache, w_cache = fold_cache(seq)
+        seq_dg = calc_dg(seq)
+
+        self.assertEqual(
+            seq_dg, sum(s.e for s in traceback(0, len(seq) - 1, v_cache, w_cache))
+        )
 
     def test_fold_dna(self):
         """DNA folding to find min energy secondary structure."""
@@ -88,7 +96,6 @@ class TestFold(unittest.TestCase):
         seq = "GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC"  # three branch
 
         structs = fold(seq)
-
         self.assertTrue(
             any("BIFURCATION" in s.desc and (7, 41) in s.ij for s in structs)
         )
@@ -97,7 +104,6 @@ class TestFold(unittest.TestCase):
         """Create a pair for stack checking."""
 
         seq = "ATGGAATAGTG"
-
         self.assertEqual(_pair(seq, 0, 1, 9, 10), "AT/TG")
 
     def test_stack(self):
@@ -169,7 +175,6 @@ class TestFold(unittest.TestCase):
             v_cache.append([STRUCT_DEFAULT] * len(seq))
             w_cache.append([STRUCT_DEFAULT] * len(seq))
         struct = _w(seq, i, j, temp, v_cache, w_cache, RNA_ENERGIES)
-
         self.assertAlmostEqual(struct.e, -3.8, delta=0.2)
 
         seq = "CCUGCUUUGCACGCAGG"
@@ -182,7 +187,6 @@ class TestFold(unittest.TestCase):
             v_cache.append([STRUCT_DEFAULT] * len(seq))
             w_cache.append([STRUCT_DEFAULT] * len(seq))
         struct = _w(seq, i, j, temp, v_cache, w_cache, RNA_ENERGIES)
-
         self.assertAlmostEqual(struct.e, -6.4, delta=0.2)
 
         seq = "GCGGUUCGAUCCCGC"

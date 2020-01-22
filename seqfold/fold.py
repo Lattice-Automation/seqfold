@@ -44,43 +44,20 @@ Cache = List[List[Struct]]
 """A map from i, j tuple to a value."""
 
 
-def calc_dg(seq: str, temp: float = 37.0) -> float:
-    """Fold the sequence and return just the delta G of the structure
+def fold_cache(seq: str, temp: float = 37.0) -> Tuple[Cache, Cache]:
+    """Fold a nucleic acid sequence and return the w_cache.
+
+    The Cache is useful for gathering many possible energies
+    between a series of (i,j) combinations.
 
     Args:
         seq: The sequence to fold
     
     Keyword Args:
         temp: The temperature to fold at
-
+    
     Returns:
-        float: The minimum free energy of the folded sequence
-    """
-
-    structs = fold(seq, temp)
-    return round(sum(s.e for s in structs), 2)
-
-
-def fold(seq: str, temp: float = 37.0) -> List[Struct]:
-    """Fold the DNA sequence and return lowest free energy score.
-
-    Based on the approach described in:
-    Zuker and Stiegler, 1981
-    https://www.ncbi.nlm.nih.gov/pmc/articles/PMC326673/pdf/nar00394-0137.pdf
-
-    If the sequence is 50 or more bp long, "isolated" matching bp
-    are ignored in V(i,j). This is based on an approach described in:
-    Mathews, Sabina, Zuker and Turner, 1999
-    https://www.ncbi.nlm.nih.gov/pubmed/10329189
-
-    Args:
-        seq: The sequence to fold
-
-    Keyword Args:
-        temp: The temperature the fold takes place in, in Celcius
-
-    Returns:
-        List[Struct]: A list of structures. Stacks, bulges, hairpins, etc.
+        (Cache, Cache): The w_cache and the v_cache for traversal later
     """
 
     seq = seq.upper()
@@ -110,8 +87,53 @@ def fold(seq: str, temp: float = 37.0) -> List[Struct]:
     # fill the cache
     _w(seq, 0, n - 1, temp, v_cache, w_cache, emap)
 
-    # get the structure out of the cache
-    return _traceback(0, n - 1, v_cache, w_cache)
+    return v_cache, w_cache
+
+
+def fold(seq: str, temp: float = 37.0) -> List[Struct]:
+    """Fold the DNA sequence and return lowest free energy score.
+
+    Based on the approach described in:
+    Zuker and Stiegler, 1981
+    https://www.ncbi.nlm.nih.gov/pmc/articles/PMC326673/pdf/nar00394-0137.pdf
+
+    If the sequence is 50 or more bp long, "isolated" matching bp
+    are ignored in V(i,j). This is based on an approach described in:
+    Mathews, Sabina, Zuker and Turner, 1999
+    https://www.ncbi.nlm.nih.gov/pubmed/10329189
+
+    Args:
+        seq: The sequence to fold
+
+    Keyword Args:
+        temp: The temperature the fold takes place in, in Celcius
+
+    Returns:
+        List[Struct]: A list of structures. Stacks, bulges, hairpins, etc.
+    """
+
+    v_cache, w_cache = fold_cache(seq, temp)
+    n = len(seq)
+
+    # get the minimum free energy structure out of the cache
+    return traceback(0, n - 1, v_cache, w_cache)
+
+
+def calc_dg(seq: str, temp: float = 37.0) -> float:
+    """Fold the sequence and return just the delta G of the structure
+
+    Args:
+        seq: The sequence to fold
+    
+    Keyword Args:
+        temp: The temperature to fold at
+
+    Returns:
+        float: The minimum free energy of the folded sequence
+    """
+
+    structs = fold(seq, temp)
+    return round(sum(s.e for s in structs), 2)
 
 
 def _w(
@@ -738,7 +760,7 @@ def _multi_branch(
     return Struct(e, f"BIFURCATION:{str(unpaired)}n/{str(branches_count)}h", branches)
 
 
-def _traceback(i: int, j: int, v_cache: Cache, w_cache: Cache) -> List[Struct]:
+def traceback(i: int, j: int, v_cache: Cache, w_cache: Cache) -> List[Struct]:
     """Traceback thru the V(i,j) and W(i,j) caches to find the structure
 
     For each step, get to the lowest energy W(i,j) within that block
@@ -750,7 +772,7 @@ def _traceback(i: int, j: int, v_cache: Cache, w_cache: Cache) -> List[Struct]:
     Args:
         i: The leftmost index to start searching in
         j: The rightmost index to start searching in
-        v_cache: Energies/structures where i and j bond
+        v_cache: Energies where i and j bond
         w_cache: Energies/sub-structures between or with i and j
 
     Returns:
@@ -786,11 +808,11 @@ def _traceback(i: int, j: int, v_cache: Cache, w_cache: Cache) -> List[Struct]:
         structs = _trackback_energy(structs)
         branches: List[Struct] = []
         for i1, j1 in s.ij:
-            traceback = _traceback(i1, j1, v_cache, w_cache)
-            if traceback and traceback[0].ij:
-                i2, j2 = traceback[0].ij[0]
+            tb = traceback(i1, j1, v_cache, w_cache)
+            if tb and tb[0].ij:
+                i2, j2 = tb[0].ij[0]
                 e_sum += w_cache[i2][j2].e
-                branches += traceback
+                branches += tb
 
         last = structs[-1]
         structs[-1] = Struct(round(last.e - e_sum, 1), last.desc, list(last.ij))
