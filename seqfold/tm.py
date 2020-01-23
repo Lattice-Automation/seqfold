@@ -4,8 +4,7 @@ import math
 from typing import List, Tuple
 
 from .dna import DNA_COMPLEMENT, DNA_ENERGIES
-
-TmCache = List[List[float]]
+from .types import Cache
 
 
 def tm(seq1: str, seq2: str = "", pcr: bool = True) -> float:
@@ -81,7 +80,7 @@ def tm(seq1: str, seq2: str = "", pcr: bool = True) -> float:
     return _calc_tm(dh, ds, pcr, gc, len(seq1))
 
 
-def tm_cache(seq1: str, seq2: str = "", pcr: bool = True) -> TmCache:
+def tm_cache(seq1: str, seq2: str = "", pcr: bool = True) -> Cache:
     """Return a TmCache where each (i, j) returns the Tm for that subspan.
 
     1. Build up the 2D matrixes for the tm calculation:

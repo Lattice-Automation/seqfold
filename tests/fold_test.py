@@ -4,17 +4,19 @@ from os import path
 from time import time
 import unittest
 
-from seqfold import dg, fold, cache, traceback, Cache, Struct
+from seqfold import dg, dg_cache, fold, Cache, Struct
 from seqfold.dna import DNA_ENERGIES
 from seqfold.rna import RNA_ENERGIES
 from seqfold.fold import (
     STRUCT_DEFAULT,
+    _traceback,
     _bulge,
     _stack,
     _hairpin,
     _internal_loop,
     _pair,
     _w,
+    Structs,
 )
 
 
@@ -39,12 +41,10 @@ class TestFold(unittest.TestCase):
         """Gather a cache of the folded structure."""
 
         seq = "ATGGATTTAGATAGAT"
-        v_cache, w_cache = cache(seq)
+        cache = dg_cache(seq)
         seq_dg = dg(seq)
 
-        self.assertEqual(
-            seq_dg, sum(s.e for s in traceback(0, len(seq) - 1, v_cache, w_cache))
-        )
+        self.assertAlmostEqual(seq_dg, cache[0][len(seq) - 1], delta=1)
 
     def test_fold_dna(self):
         """DNA folding to find min energy secondary structure."""
@@ -200,7 +200,7 @@ class TestFold(unittest.TestCase):
         struct = _w(seq, i, j, temp, v_cache, w_cache, RNA_ENERGIES)
         self.assertAlmostEqual(struct.e, -4.2, delta=0.2)
 
-    def _debug(self, cache: Cache):
+    def _debug(self, cache: Structs):
         """Log the contents of a Cache."""
 
         rows = []

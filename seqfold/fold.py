@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional, List, Tuple
 
 from .dna import DNA_ENERGIES
 from .rna import RNA_ENERGIES
-from .types import Energies
+from .types import Energies, Cache
 
 
 class Struct:
@@ -40,58 +40,8 @@ STRUCT_DEFAULT = Struct(-math.inf)
 STRUCT_NULL = Struct(math.inf)
 
 
-Cache = List[List[Struct]]
-"""A map from i, j tuple to a value."""
-
-
-def cache(seq: str, temp: float = 37.0) -> Tuple[Cache, Cache]:
-    """Fold a nucleic acid sequence and return the w_cache.
-
-    The Cache is useful for gathering many possible energies
-    between a series of (i,j) combinations.
-
-    Args:
-        seq: The sequence to fold
-    
-    Keyword Args:
-        temp: The temperature to fold at
-    
-    Returns:
-        (Cache, Cache): The w_cache and the v_cache for traversal later
-    """
-
-    # if it's a SeqRecord, gather just the seq
-    if "SeqRecord" in str(type(seq)):
-        seq = str(seq.seq)  # type: ignore
-
-    seq = seq.upper()
-    temp = temp + 273.15  # kelvin
-
-    # figure out whether it's DNA or RNA, choose energy map
-    dna = True
-    bps = set(seq)
-    if "U" in bps and "T" in bps:
-        raise RuntimeError(
-            "Both T and U in sequence. Provide one or the other for DNA OR RNA."
-        )
-    if all(bp in "AUCG" for bp in bps):
-        dna = False
-    elif any(bp not in "ATGC" for bp in bps):
-        diff = [bp for bp in bps if bp not in "ATUGC"]
-        raise RuntimeError(f"Unknown bp: {diff}. Only DNA/RNA foldable")
-    emap = DNA_ENERGIES if dna else RNA_ENERGIES
-
-    n = len(seq)
-    v_cache: Cache = []
-    w_cache: Cache = []
-    for _ in range(n):
-        v_cache.append([STRUCT_DEFAULT] * n)
-        w_cache.append([STRUCT_DEFAULT] * n)
-
-    # fill the cache
-    _w(seq, 0, n - 1, temp, v_cache, w_cache, emap)
-
-    return v_cache, w_cache
+Structs = List[List[Struct]]
+"""A map from i, j tuple to a min free energy Struct."""
 
 
 def fold(seq: str, temp: float = 37.0) -> List[Struct]:
@@ -116,11 +66,11 @@ def fold(seq: str, temp: float = 37.0) -> List[Struct]:
         List[Struct]: A list of structures. Stacks, bulges, hairpins, etc.
     """
 
-    v_cache, w_cache = cache(seq, temp)
+    v_cache, w_cache = _cache(seq, temp)
     n = len(seq)
 
     # get the minimum free energy structure out of the cache
-    return traceback(0, n - 1, v_cache, w_cache)
+    return _traceback(0, n - 1, v_cache, w_cache)
 
 
 def dg(seq: str, temp: float = 37.0) -> float:
@@ -140,13 +90,86 @@ def dg(seq: str, temp: float = 37.0) -> float:
     return round(sum(s.e for s in structs), 2)
 
 
+def dg_cache(seq: str, temp: float = 37.0) -> Cache:
+    """Fold a nucleic acid sequence and return the estimated dg of each (i,j) pairing.
+
+    Args:
+        seq: The nucleic acid sequence to fold
+    
+    Keyword Args:
+        temp: The temperature to fold at
+    
+    Returns:
+        Cache: A 2D matrix where each (i, j) pairing corresponds to the
+            minimum free energy between i and j
+    """
+
+    _, w_cache = _cache(seq, temp)
+
+    cache: Cache = []
+    for row in w_cache:
+        cache.append([s.e for s in row])
+
+    return cache
+
+
+def _cache(seq: str, temp: float = 37.0) -> Tuple[Structs, Structs]:
+    """Create caches for the w_cache and v_cache
+
+    The Structs is useful for gathering many possible energies
+    between a series of (i,j) combinations.
+
+    Args:
+        seq: The sequence to fold
+    
+    Keyword Args:
+        temp: The temperature to fold at
+    
+    Returns:
+        (Structs, Structs): The w_cache and the v_cache for traversal later
+    """
+
+    # if it's a SeqRecord, gather just the seq
+    if "SeqRecord" in str(type(seq)):
+        seq = str(seq.seq)  # type: ignore
+
+    seq = seq.upper()
+    temp = temp + 273.15  # kelvin
+
+    # figure out whether it's DNA or RNA, choose energy map
+    dna = True
+    bps = set(seq)
+    if "U" in bps and "T" in bps:
+        raise RuntimeError(
+            "Both T and U in sequence. Provide one or the other for DNA OR RNA."
+        )
+    if all(bp in "AUCG" for bp in bps):
+        dna = False
+    elif any(bp not in "ATGC" for bp in bps):
+        diff = [bp for bp in bps if bp not in "ATUGC"]
+        raise RuntimeError(f"Unknown bp: {diff}. Only DNA/RNA foldable")
+    emap = DNA_ENERGIES if dna else RNA_ENERGIES
+
+    n = len(seq)
+    v_cache: Structs = []
+    w_cache: Structs = []
+    for _ in range(n):
+        v_cache.append([STRUCT_DEFAULT] * n)
+        w_cache.append([STRUCT_DEFAULT] * n)
+
+    # fill the cache
+    _w(seq, 0, n - 1, temp, v_cache, w_cache, emap)
+
+    return v_cache, w_cache
+
+
 def _w(
     seq: str,
     i: int,
     j: int,
     temp: float,
-    v_cache: Cache,
-    w_cache: Cache,
+    v_cache: Structs,
+    w_cache: Structs,
     emap: Energies,
 ) -> Struct:
     """Find and return the lowest free energy structure in Sij subsequence
@@ -193,8 +216,8 @@ def _v(
     i: int,
     j: int,
     temp: float,
-    v_cache: Cache,
-    w_cache: Cache,
+    v_cache: Structs,
+    w_cache: Structs,
     emap: Energies,
 ) -> Struct:
     """Find, store and return the minimum free energy of the structure between i and j
@@ -629,8 +652,8 @@ def _multi_branch(
     k: int,
     j: int,
     temp: float,
-    v_cache: Cache,
-    w_cache: Cache,
+    v_cache: Structs,
+    w_cache: Structs,
     emap: Energies,
     helix: bool = False,
 ) -> Struct:
@@ -645,8 +668,8 @@ def _multi_branch(
         k: The mid-point in the search
         j: The right ending index
         temp: Folding temp
-        v_cache: Cache of energies where V(i,j) bond
-        w_cache: Cache of min energy of substructures between W(i,j)
+        v_cache: Structs of energies where V(i,j) bond
+        w_cache: Structs of min energy of substructures between W(i,j)
         helix: Whether this multibranch is enclosed by a helix
         emap: Map to DNA/RNA energies
     
@@ -764,7 +787,7 @@ def _multi_branch(
     return Struct(e, f"BIFURCATION:{str(unpaired)}n/{str(branches_count)}h", branches)
 
 
-def traceback(i: int, j: int, v_cache: Cache, w_cache: Cache) -> List[Struct]:
+def _traceback(i: int, j: int, v_cache: Structs, w_cache: Structs) -> List[Struct]:
     """Traceback thru the V(i,j) and W(i,j) caches to find the structure
 
     For each step, get to the lowest energy W(i,j) within that block
@@ -812,7 +835,7 @@ def traceback(i: int, j: int, v_cache: Cache, w_cache: Cache) -> List[Struct]:
         structs = _trackback_energy(structs)
         branches: List[Struct] = []
         for i1, j1 in s.ij:
-            tb = traceback(i1, j1, v_cache, w_cache)
+            tb = _traceback(i1, j1, v_cache, w_cache)
             if tb and tb[0].ij:
                 i2, j2 = tb[0].ij[0]
                 e_sum += w_cache[i2][j2].e
