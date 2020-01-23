@@ -106,11 +106,11 @@ def tm_cache(seq1: str, seq2: str = "", pcr: bool = True) -> Cache:
     seq1, seq2 = _parse_input(seq1, seq2)
     n = len(seq1)  # using nearest neighbors, -1
 
-    arr_dh, arr_ds, arr_gc, arr_tm = [], [], [], []
+    arr_gc = gc_cache(seq1)
+    arr_dh, arr_ds, arr_tm = [], [], []
     for _ in range(n):
         arr_dh.append([0.0] * n)
         arr_ds.append([0.0] * n)
-        arr_gc.append([0.0] * n)
         arr_tm.append([math.inf] * n)
 
     # fill in the diagonal
@@ -118,7 +118,6 @@ def tm_cache(seq1: str, seq2: str = "", pcr: bool = True) -> Cache:
         if i == n - 1:  # hackish
             arr_dh[i][i] = arr_dh[i - 1][i - 1]
             arr_ds[i][i] = arr_ds[i - 1][i - 1]
-            arr_gc[i][i] = arr_gc[i - 1][i - 1]
             continue
 
         pair = f"{seq1[i]}{seq1[i + 1]}/{seq2[i]}{seq2[i + 1]}"
@@ -130,22 +129,56 @@ def tm_cache(seq1: str, seq2: str = "", pcr: bool = True) -> Cache:
 
         arr_dh[i][i] = dh
         arr_ds[i][i] = ds
-        arr_gc[i][i] = 1.0 if seq1[i] in "GC" else 0.0
-
-        if i == n - 2 and not arr_gc[i][i]:  # don't ignore last pair
-            arr_gc[i][i] = 1.0 if seq1[i + 1] in "GC" else 0.0
 
     # fill in the tm array
     for i in range(n):
         for j in range(i + 1, n):
             arr_dh[i][j] = arr_dh[i][j - 1] + arr_dh[j][j]
             arr_ds[i][j] = arr_ds[i][j - 1] + arr_ds[j][j]
-            arr_gc[i][j] = arr_gc[i][j - 1] + arr_gc[j][j]
             arr_tm[i][j] = _calc_tm(
-                arr_dh[i][j], arr_ds[i][j], pcr, arr_gc[i][j] / (j - i + 1), j - i + 1
+                arr_dh[i][j], arr_ds[i][j], pcr, arr_gc[i][j], j - i + 1
             )
 
     return arr_tm
+
+
+def gc_cache(seq: str) -> Cache:
+    """Return the GC ratio of each range, between i and j, in the sequence
+    
+    Args:
+        seq: The sequence whose tm we're querying
+    
+    Returns:
+        Cache: A cache for GC ratio lookup
+    """
+
+    n = len(seq)
+    arr_gc = []
+    for _ in seq:
+        arr_gc.append([math.inf] * len(seq))
+
+    # fill in the diagonal
+    for i in range(n):
+        if i == n - 1:  # hackish
+            arr_gc[i][i] = arr_gc[i - 1][i - 1]
+            continue
+
+        arr_gc[i][i] = 1.0 if seq[i] in "GC" else 0.0
+
+        if i == n - 2 and not arr_gc[i][i]:  # don't ignore last pair
+            arr_gc[i][i] = 1.0 if seq[i + 1] in "GC" else 0.0
+
+    # fill in the upper right of the array
+    for i in range(n):
+        for j in range(i + 1, n):
+            arr_gc[i][j] = arr_gc[i][j - 1] + arr_gc[j][j]
+
+    # convert to ratios
+    for i in range(n):
+        for j in range(i, n):
+            arr_gc[i][j] = round(arr_gc[i][j] / (j - i + 1), 1)
+
+    return arr_gc
 
 
 def _parse_input(seq1: str, seq2: str = "") -> Tuple[str, str]:

@@ -2,7 +2,7 @@
 
 import unittest
 
-from seqfold import tm, tm_cache
+from seqfold import tm, tm_cache, gc_cache
 
 
 class TestTm(unittest.TestCase):
@@ -39,3 +39,20 @@ class TestTm(unittest.TestCase):
         self.assertLess(cache[3][n - 3], 71.6)
         self.assertEqual(float("inf"), cache[5][5], "inf for invalid subsequences")
         self.assertEqual(float("inf"), cache[5][1], "inf for invalid subsequences")
+
+    def test_gc_cache(self):
+        """Create a cache of GC ratios from i to j."""
+
+        seq = "GGATTACCCAGATAGATAGAT"
+        ranges = [(0, len(seq) - 1), (5, 9), (3, 15)]
+
+        cache = gc_cache(seq)
+
+        for s, e in ranges:
+            est = cache[s][e]
+            ss = seq[s : e + 1]
+            gc_count = ss.count("G") + ss.count("C")
+            gc_actual = float(gc_count) / (e - s + 1)
+
+            self.assertAlmostEqual(gc_actual, est, delta=0.02)
+

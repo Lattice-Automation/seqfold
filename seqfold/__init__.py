@@ -11,5 +11,5 @@ finally:
     del get_distribution, DistributionNotFound
 
 from .fold import fold, dg, dg_cache, fold, Struct
-from .tm import tm, tm_cache
+from .tm import tm, tm_cache, gc_cache
 from .types import Cache
