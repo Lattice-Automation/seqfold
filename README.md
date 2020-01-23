@@ -15,16 +15,19 @@ pip install seqfold
 ### Python
 
 ```python
-from seqfold import dg, fold, Struct
+from seqfold import dg, dg_cache, fold, Struct
 
 # just returns minimum free energy
 dg("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC", temp = 37.0)  # -12.94
 
-# returns a list of `seqfold.Struct` from the minimum free energy structure
+# `fold` returns a list of `seqfold.Struct` from the minimum free energy structure
 structs: List[Struct] = fold("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC")
 print(sum(s.e for s in structs))  # -12.94; same as calc_dg()
 for struct in structs:
     print(struct) # prints the i, j, dg, and description of each structure
+
+# `dg_cache` returns a 2D array where each (i,j) combination returns the MFE from i to j inclusive
+cache: List[List[float]] = dg_cache("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC")
 ```
 
 ### CLI
