@@ -65,10 +65,16 @@ def parse_args(args: List[str]) -> argparse.Namespace:
         help="temperature in Celsius",
     )
     parser.add_argument(
-        "-v", "--verbose", action="store_true", help="log a 2D dot-bracket structure",
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="log a dot-bracket of the MFE folding",
     )
     parser.add_argument(
-        "-l", "--log", action="store_true", help="log each structure",
+        "-l",
+        "--log",
+        action="store_true",
+        help="log each substructure in the MFE folding",
     )
     parser.add_argument(
         "--version", action="version", version="seqfold {ver}".format(ver=__version__),

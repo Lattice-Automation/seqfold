@@ -43,8 +43,8 @@ positional arguments:
 optional arguments:
   -h, --help     show this help message and exit
   -t FLOAT       temperature in Celsius
-  -v, --verbose  log a 2D dot-bracket structure
-  -l, --log      log each structure
+  -v, --verbose  log a dot-bracket of the MFE structure
+  -l, --log      log each substructure in the MFE folding
   --version      show program's version number and exit
 ```
 
