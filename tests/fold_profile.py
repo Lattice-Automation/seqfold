@@ -1,14 +1,14 @@
 import profile
 import pstats
 
-from seqfold import calc_dg
+from seqfold import dg
 
-# ~7 seconds with python alone
-# ~4 seconds with cython extension's output
+# ~taking ~21 seconds from CLI, too slow with profiler
+# ~16.5 seconds with Cython
 STATS_FILE = "fold_profile.stats"
 
 SEQ = "'GAAATAGACGCCAAGTTCAATCCGTACTCCGACGTACGATGGAACAGTGTGGATGTGACGAGCTTCATTTATACCCTTCGCGCGCCGGACCGGGGTCCGCAAGGCGCGGCGGTGCACAAGCAATTGACAACTAACCACCGTGTATTCGTTATGGCACCAGGGAGTTTAAGCCGAGTCAATGGAGCTCGCAATACAGAGTT'"
-SCRIPT = f"calc_dg({SEQ}, 37.0)"
+SCRIPT = f"dg({SEQ}, 37.0)"
 print(SCRIPT)
 profile.run(SCRIPT, STATS_FILE)
 
