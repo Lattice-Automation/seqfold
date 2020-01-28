@@ -1,6 +1,6 @@
 from os import path
 
-from seqfold.fold import calc_dg, fold
+from seqfold.fold import dg, fold
 
 import seqfold
 
@@ -24,8 +24,8 @@ DNA_RESULTS = {}
 
 for seq, ufold in DNA_EXAMPLES.items():
     ss = fold(seq, temp=37.0)
-    dg = round(sum(s.e for s in ss), 2)
-    DNA_RESULTS[seq] = (dg, ufold)
+    cdg = round(sum(s.e for s in ss), 2)
+    DNA_RESULTS[seq] = (cdg, ufold)
 
 # save DNA_RESULTS to examples
 with open(path.join(DIR, "..", "examples", "dna.csv"), "w") as ex:
@@ -64,8 +64,8 @@ RNA_EXAMPLES = {
 RNA_RESULTS = {}
 
 for seq, ufold in RNA_EXAMPLES.items():
-    dg = calc_dg(seq, temp=37.0)
-    RNA_RESULTS[seq] = (dg, ufold)
+    cdg = dg(seq, temp=37.0)
+    RNA_RESULTS[seq] = (cdg, ufold)
 
 # save RNA_RESULTS to examples
 with open(path.join(DIR, "..", "examples", "rna.csv"), "w") as ex:
