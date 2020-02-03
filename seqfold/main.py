@@ -28,7 +28,7 @@ def run():
 
     if args.log:
         # log each structure
-        print(Struct.fmt.format("i", "j", "dg", "description"))
+        print(Struct.fmt.format("i", "j", "ddg", "description"))
         for s in structs:
             print(s)
 
@@ -54,7 +54,7 @@ def parse_args(args: List[str]) -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "seq", type=str, metavar="SEQ", help="nucleic acid sequence to fold",
+        "seq", type=str, metavar="SEQ", help="nucleic acid sequence to fold"
     )
     parser.add_argument(
         "-t",
@@ -77,7 +77,7 @@ def parse_args(args: List[str]) -> argparse.Namespace:
         help="log each substructure in the MFE folding",
     )
     parser.add_argument(
-        "--version", action="version", version="seqfold {ver}".format(ver=__version__),
+        "--version", action="version", version="seqfold {ver}".format(ver=__version__)
     )
 
     return parser.parse_args(args)
