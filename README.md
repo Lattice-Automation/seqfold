@@ -87,7 +87,7 @@ GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC
 
 ## Motivation
 
-Secondary structure prediction is used for selecting [primers for PCR](https://academic.oup.com/nar/article/40/15/e115/1223759), designing [oligos for MAGE](https://pubs.acs.org/doi/abs/10.1021/acssynbio.5b00219), and tuning [RBS expression rates](https://www.sciencedirect.com/science/article/pii/B9780123851208000024).
+Secondary structure prediction is used for making [PCR primers](https://academic.oup.com/nar/article/40/15/e115/1223759), designing [oligos for MAGE](https://pubs.acs.org/doi/abs/10.1021/acssynbio.5b00219), and tuning [RBS expression rates](https://www.sciencedirect.com/science/article/pii/B9780123851208000024).
 
 While [UNAFold](http://unafold.rna.albany.edu/?q=DINAMelt/software) and [mfold](https://www.ibridgenetwork.org/#!/profiles/1045554571442/innovations/1/) are the most widely used applications for nucleic acid secondary structure prediction, their format and license are restrictive. `seqfold` is meant to be an open-source, minimalist alternative for predicting minimum free energy secondary structure.
 
@@ -103,7 +103,7 @@ While [UNAFold](http://unafold.rna.albany.edu/?q=DINAMelt/software) and [mfold](
 
 ## Citations
 
-That papers and others that were used to develop this library are below. Each paper is listed along with how it relates to `seqfold`.
+Papers, and how they helped in developing `seqfold`, are listed below.
 
 ### Nussinov, 1980
 
