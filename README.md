@@ -24,7 +24,7 @@ dg("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC", temp = 37.0)  # -12.94
 structs: List[Struct] = fold("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC")
 print(sum(s.e for s in structs))  # -12.94; same as calc_dg()
 for struct in structs:
-    print(struct) # prints the i, j, dg, and description of each structure
+    print(struct) # prints the i, j, ddg, and description of each structure
 
 # `dg_cache` returns a 2D array where each (i,j) combination returns the MFE from i to j inclusive
 cache: List[List[float]] = dg_cache("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC")
@@ -139,4 +139,4 @@ Source of RNA nearest neighbor change in entropy and enthalpy parameter data. In
 
 > Ward, M., Datta, A., Wise, M., & Mathews, D. H. (2017). Advanced multi-loop algorithms for RNA secondary structure prediction reveal that the simplest model is best. Nucleic acids research, 45(14), 8541-8550.
 
-An investigation of energy functions for multibranch loops that validates the simple linear approach employed by `Jaeger, 1989` that keeps runtime at `O(n³)`.
+An investigation of energy functions for multibranch loops that validates the simple linear approach employed by `Jaeger, 1989` that keeps runtime within `O(n³)`.
