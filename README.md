@@ -22,7 +22,7 @@ dg("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC", temp = 37.0)  # -12.94
 
 # `fold` returns a list of `seqfold.Struct` from the minimum free energy structure
 structs: List[Struct] = fold("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC")
-print(sum(s.e for s in structs))  # -12.94; same as calc_dg()
+print(sum(s.e for s in structs))  # -12.94, same as dg()
 for struct in structs:
     print(struct) # prints the i, j, ddg, and description of each structure
 
