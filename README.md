@@ -1,5 +1,7 @@
 # seqfold
 
+[![DOI](https://zenodo.org/badge/224018980.svg)](https://zenodo.org/badge/latestdoi/224018980)
+
 Predict the minimum free energy structure of nucleic acids.
 
 `seqfold` is an implementation of the `Zuker, 1981` dynamic programming algorithm, the basis for [UNAFold](http://unafold.rna.albany.edu/?q=DINAMelt/software)/[mfold](https://www.ibridgenetwork.org/#!/profiles/1045554571442/innovations/1/), with energy functions from `SantaLucia, 2004` (DNA) and `Turner, 2009` (RNA).
