@@ -36,6 +36,6 @@ setup(
     ],
     entry_points={"console_scripts": ["seqfold=seqfold.main:run"]},
     zip_safe=False,
-    extra_require={"dev": ["black", "pylint", "bumpversion", "Cython"]},
-    python_requires=">=3.0",
+    extras_require={"dev": ["black", "pylint", "bumpversion", "Cython"]},
+    python_requires=">=3.5",
 )

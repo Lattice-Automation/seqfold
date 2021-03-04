@@ -1,7 +1,7 @@
 .PHONY: examples
 
 install:
-	rm ./seqfold/*.c
+	rm -f ./seqfold/*.c
 	python3 setup.py install
 
 test:

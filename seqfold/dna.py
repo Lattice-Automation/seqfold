@@ -13,7 +13,7 @@ DNA_MULTIBRANCH: MultiBranch = (2.6, 0.2, 0.2, 2.0)
 Inferred from:
 Supplemental Material: Annu.Rev.Biophs.Biomol.Struct.33:415-40
 doi: 10.1146/annurev.biophys.32.110601.141800
-The Termodynamicso f DNA Structural Motifs
+The Thermodynamics of DNA Structural Motifs
 SantaLucia and Hicks, 2004
 """
 
@@ -24,18 +24,18 @@ DNA_NN: BpEnergy = {
     "sym": (0, -1.4),
     "AA/TT": (-7.6, -21.3),
     "AT/TA": (-7.2, -20.4),
-    "TA/AT": (-7.2, -20.4),
+    "TA/AT": (-7.2, -21.3),
     "CA/GT": (-8.5, -22.7),
     "GT/CA": (-8.4, -22.4),
     "CT/GA": (-7.8, -21.0),
     "GA/CT": (-8.2, -22.2),
     "CG/GC": (-10.6, -27.2),
     "GC/CG": (-9.8, -24.4),
-    "GG/CC": (-8.0, -19.0),
+    "GG/CC": (-8.0, -19.9),
 }
 """
-SantaLucia (1998)
-A unified view of polymer, dumbbell, and oligonucleotide DNA nearest-neighbor thermodynamics
+The Thermodynamics of DNA Structural Motifs
+SantaLucia and Hicks, 2004
 """
 
 DNA_INTERNAL_MM: BpEnergy = {

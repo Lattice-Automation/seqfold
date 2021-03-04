@@ -63,8 +63,8 @@ class TestFold(unittest.TestCase):
         for seq, ufold in unafold_dgs.items():
             d = dg(seq, temp=37.0)
 
-            # accepting a 50% difference
-            delta = abs(0.5 * min(d, ufold))
+            # accepting a 60% difference
+            delta = abs(0.6 * min(d, ufold))
             self.assertAlmostEqual(d, ufold, delta=delta)
 
     def test_fold_rna(self):
