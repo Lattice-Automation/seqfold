@@ -17,19 +17,19 @@ pip install seqfold
 ### Python
 
 ```python
-from seqfold import dg, dg_cache, fold, Struct
+from seqfold import dg, dg_cache, fold
 
 # just returns minimum free energy
 dg("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC", temp = 37.0)  # -12.94
 
 # `fold` returns a list of `seqfold.Struct` from the minimum free energy structure
-structs: List[Struct] = fold("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC")
+structs = fold("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC")
 print(sum(s.e for s in structs))  # -12.94, same as dg()
 for struct in structs:
     print(struct) # prints the i, j, ddg, and description of each structure
 
 # `dg_cache` returns a 2D array where each (i,j) combination returns the MFE from i to j inclusive
-cache: List[List[float]] = dg_cache("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC")
+cache = dg_cache("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC")
 ```
 
 ### CLI
@@ -61,7 +61,7 @@ $ seqfold GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC -t 32
 $ seqfold GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC -t 32 -v -l
 GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC
 ((((((((.((((......))))..((((.......)))).))))))))
-   i    j     dg  description
+   i    j    ddg  description
    0   48   -2.2  STACK:GG/CC
    1   47   -2.2  STACK:GG/CC
    2   46   -1.4  STACK:GA/CT
