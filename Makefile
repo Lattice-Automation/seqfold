@@ -13,13 +13,13 @@ parse:
 
 patch: test
 	bumpversion patch
-	pypy3 setup.py sdist bdist_wheel
-	pypy3 -m twine upload dist/* --skip-existing
+	python3 setup.py sdist bdist_wheel
+	python3 -m twine upload dist/* --skip-existing
 
 minor: test
 	bumpversion minor
-	pypy3 setup.py sdist bdist_wheel
-	pypy3 -m twine upload dist/* --skip-existing
+	python3 setup.py sdist bdist_wheel
+	python3 -m twine upload dist/* --skip-existing
 
 examples: install
 	pypy3 ./tests/fold_examples.py
