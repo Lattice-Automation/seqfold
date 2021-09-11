@@ -1,7 +1,12 @@
 """Predict nucleic acid secondary structure"""
 
 import math
-from typing import Any, Dict, Optional, List, Tuple
+from typing import List, Tuple
+
+from numba import int32, float32
+from numba.core.decorators import jit
+from numba.experimental import jitclass
+from numba.types import string
 
 from .dna import DNA_ENERGIES
 from .rna import RNA_ENERGIES
@@ -11,14 +16,15 @@ from .types import Energies, Cache
 class Struct:
     """A single structure with a free energy, description, and inward children."""
 
-    fmt = "{:>4} {:>4} {:>6}  {:<15}"
-
     def __init__(
-        self, e: float = -math.inf, desc: str = "", ij: List[Tuple[int, int]] = []
+        self, e: float = -math.inf, desc: str = "", ij: List[List[int]] = []
     ):
         self.e: float = e
         self.desc: str = desc
-        self.ij: List[Tuple[int, int]] = ij
+        self.ij: List[List[int]] = ij
+    
+    def __hash__(self):
+        return super().__hash__()
 
     def __eq__(self, other) -> bool:
         return self.e == other.e and self.ij == other.ij
@@ -27,12 +33,12 @@ class Struct:
         i = self.ij[0][0] if self.ij else ""
         j = self.ij[0][1] if self.ij else ""
         e = str(self.e)
-        return self.fmt.format(i, j, e, self.desc)
+        return "{:>4} {:>4} {:>6}  {:<15}".format(i, j, e, self.desc)
 
     def __bool__(self) -> bool:
         return self.e != math.inf and self.e != -math.inf
 
-    def with_ij(self, ij: List[Tuple[int, int]]):
+    def with_ij(self, ij: List[List[int]]):
         return Struct(self.e, self.desc, ij)
 
 
@@ -66,6 +72,7 @@ def fold(seq: str, temp: float = 37.0) -> List[Struct]:
         List[Struct]: A list of structures. Stacks, bulges, hairpins, etc.
     """
 
+    seq = seq.upper()
     v_cache, w_cache = _cache(seq, temp)
     n = len(seq)
 
@@ -113,6 +120,7 @@ def dg_cache(seq: str, temp: float = 37.0) -> Cache:
     return cache
 
 
+@jit
 def _cache(seq: str, temp: float = 37.0) -> Tuple[Structs, Structs]:
     """Create caches for the w_cache and v_cache
 
@@ -129,25 +137,17 @@ def _cache(seq: str, temp: float = 37.0) -> Tuple[Structs, Structs]:
         (Structs, Structs): The w_cache and the v_cache for traversal later
     """
 
-    # if it's a SeqRecord, gather just the seq
-    if "SeqRecord" in str(type(seq)):
-        seq = str(seq.seq)  # type: ignore
-
-    seq = seq.upper()
-    temp = temp + 273.15  # kelvin
-
     # figure out whether it's DNA or RNA, choose energy map
     dna = True
-    bps = set(seq)
-    if "U" in bps and "T" in bps:
+    if "U" in seq and "T" in seq:
         raise RuntimeError(
             "Both T and U in sequence. Provide one or the other for DNA OR RNA."
         )
-    if all(bp in "AUCG" for bp in bps):
+    if all(bp in "AUCG" for bp in seq):
         dna = False
-    elif any(bp not in "ATGC" for bp in bps):
-        diff = [bp for bp in bps if bp not in "ATUGC"]
-        raise RuntimeError(f"Unknown bp: {diff}. Only DNA/RNA foldable")
+    elif any(bp not in "ATGC" for bp in seq):
+        diff = [bp for bp in seq if bp not in "ATUGC"]
+        raise RuntimeError("Unknown bp: {}. Only DNA/RNA foldable".format(diff))
     emap = DNA_ENERGIES if dna else RNA_ENERGIES
 
     n = len(seq)
@@ -158,11 +158,12 @@ def _cache(seq: str, temp: float = 37.0) -> Tuple[Structs, Structs]:
         w_cache.append([STRUCT_DEFAULT] * n)
 
     # fill the cache
-    _w(seq, 0, n - 1, temp, v_cache, w_cache, emap)
+    _w(seq, 0, n - 1, temp + 273.15, v_cache, w_cache, emap)
 
     return v_cache, w_cache
 
 
+@jit
 def _w(
     seq: str,
     i: int,
@@ -211,6 +212,7 @@ def _w(
     return w
 
 
+@jit
 def _v(
     seq: str,
     i: int,
@@ -289,29 +291,29 @@ def _v(
             if stack:
                 # it's a neighboring/stacking pair in a helix
                 e2_test = _stack(seq, i, i1, j, j1, temp, emap)
-                e2_test_type = f"STACK:{pair}"
+                e2_test_type = "STACK:{}".format(pair)
 
                 if i > 0 and j == n - 1 or i == 0 and j < n - 1:
                     # there's a dangling end
-                    e2_test_type = f"STACK_DE:{pair}"
+                    e2_test_type = "STACK_DE:{}".format(pair)
             elif bulge_left and bulge_right and not pair_inner:
                 # it's an interior loop
                 e2_test = _internal_loop(seq, i, i1, j, j1, temp, emap)
-                e2_test_type = f"INTERIOR_LOOP:{str(i1 - i)}/{str(j - j1)}"
+                e2_test_type = "INTERIOR_LOOP:{}/{}".format(str(i1 - i), str(j - j1))
 
                 if i1 - i == 2 and j - j1 == 2:
                     loop_left = seq[i : i1 + 1]
                     loop_right = seq[j1 : j + 1]
                     # technically an interior loop of 1. really 1bp mismatch
-                    e2_test_type = f"STACK:{loop_left}/{loop_right[::-1]}"
+                    e2_test_type = "STACK:{}\{}".format(loop_left, loop_right[::-1])
             elif bulge_left and not bulge_right:
                 # it's a bulge on the left side
                 e2_test = _bulge(seq, i, i1, j, j1, temp, emap)
-                e2_test_type = f"BULGE:{str(i1 - i)}"
+                e2_test_type = "BULGE:{}".format(str(i1 - i))
             elif not bulge_left and bulge_right:
                 # it's a bulge on the right side
                 e2_test = _bulge(seq, i, i1, j, j1, temp, emap)
-                e2_test_type = f"BULGE:{str(j - j1)}"
+                e2_test_type = "BULGE:{}".format(str(j - j1))
             else:
                 # it's basically a hairpin, only outside bp match
                 continue
@@ -319,7 +321,7 @@ def _v(
             # add V(i', j')
             e2_test += _v(seq, i1, j1, temp, v_cache, w_cache, emap).e
             if e2_test != -math.inf and e2_test < e2.e:
-                e2 = Struct(e2_test, e2_test_type, [(i1, j1)])
+                e2 = Struct(e2_test, e2_test_type, [[i1, j1]])
 
     # E3 = min{W(i+1,i') + W(i'+1,j-1)}, i+1<i'<j-2
     e3 = STRUCT_NULL
@@ -335,6 +337,7 @@ def _v(
     return e
 
 
+@jit
 def _pair(s: str, i: int, i1: int, j: int, j1: int) -> str:
     """Return a stack representation, a key for the NN maps
 
@@ -358,6 +361,7 @@ def _pair(s: str, i: int, i1: int, j: int, j1: int) -> str:
     )
 
 
+@jit
 def _min_struct(*structs: Struct) -> Struct:
     """Return the struct with the lowest free energy that isn't -inf (undef)
 
@@ -375,6 +379,7 @@ def _min_struct(*structs: Struct) -> Struct:
     return s
 
 
+@jit
 def _d_g(d_h: float, d_s: float, temp: float) -> float:
     """Find the free energy given delta h, s and temp
 
@@ -390,6 +395,7 @@ def _d_g(d_h: float, d_s: float, temp: float) -> float:
     return d_h - temp * (d_s / 1000.0)
 
 
+@jit
 def _j_s(query_len: int, known_len: int, d_g_x: float, temp: float) -> float:
     """Estimate the free energy of length query_len based on one of length known_len.
 
@@ -411,6 +417,7 @@ def _j_s(query_len: int, known_len: int, d_g_x: float, temp: float) -> float:
     return d_g_x + 2.44 * gas_constant * temp * math.log(query_len / float(known_len))
 
 
+@jit
 def _stack(
     seq: str, i: int, i1: int, j: int, j1: int, temp: float, emap: Energies
 ) -> float:
@@ -436,11 +443,11 @@ def _stack(
         float: The free energy of the NN pairing
     """
 
-    if any(x >= len(seq) for x in [i, i1, j, j1]):
+    if any([x >= len(seq) for x in [i, i1, j, j1]]):
         return 0.0
 
     pair = _pair(seq, i, i1, j, j1)
-    if any(x == -1 for x in [i, i1, j, j1]):
+    if any([1 if x == -1 else 0 for x in [i, i1, j, j1]]):
         # it's a dangling end
         d_h, d_s = emap.DE[pair]
         return _d_g(d_h, d_s, temp)
@@ -480,6 +487,7 @@ def _stack(
     return 0
 
 
+@jit
 def _hairpin(seq: str, i: int, j: int, temp: float, emap: Energies) -> float:
     """Calculate the free energy of a hairpin.
 
@@ -534,6 +542,7 @@ def _hairpin(seq: str, i: int, j: int, temp: float, emap: Energies) -> float:
     return d_g
 
 
+@jit
 def _bulge(
     seq: str, i: int, i1: int, j: int, j1: int, temp: float, emap: Energies
 ) -> float:
@@ -573,12 +582,13 @@ def _bulge(
         d_g += _stack(seq, i, i1, j, j1, temp, emap)
 
     # penalize AT terminal bonds
-    if any(seq[k] == "A" for k in [i, i1, j, j1]):
+    if any([seq[k] == "A" for k in [i, i1, j, j1]]):
         d_g += 0.5
 
     return d_g
 
 
+@jit
 def _internal_loop(
     seq: str, i: int, i1: int, j: int, j1: int, temp: float, emap: Energies
 ) -> float:
@@ -691,7 +701,7 @@ def _multi_branch(
         return STRUCT_NULL
 
     # gather all branches of this multi-branch structure
-    branches: List[Tuple[int, int]] = []
+    branches: List[List[int]] = []
 
     def add_branch(s: Struct):
         if not s or not s.ij:
@@ -711,7 +721,7 @@ def _multi_branch(
 
     # if there's a helix, i,j counts as well
     if helix:
-        branches.append((i, j))
+        branches.append([i, j])
 
     # count up unpaired bp and asymmetry
     branches_count = len(branches)
@@ -784,9 +794,10 @@ def _multi_branch(
     if helix:
         branches.pop()
 
-    return Struct(e, f"BIFURCATION:{str(unpaired)}n/{str(branches_count)}h", branches)
+    return Struct(e, "BIFURCATION:{}n/{}h".format(str(unpaired), str(branches_count)), branches)
 
 
+@jit
 def _traceback(i: int, j: int, v_cache: Structs, w_cache: Structs) -> List[Struct]:
     """Traceback thru the V(i,j) and W(i,j) caches to find the structure
 
@@ -817,7 +828,7 @@ def _traceback(i: int, j: int, v_cache: Structs, w_cache: Structs) -> List[Struc
     structs: List[Struct] = []
     while True:
         s = v_cache[i][j]
-        structs.append(s.with_ij([(i, j)]))
+        structs.append(s.with_ij([[i, j]]))
 
         # it's a hairpin, end of structure
         if not s.ij:
@@ -845,9 +856,8 @@ def _traceback(i: int, j: int, v_cache: Structs, w_cache: Structs) -> List[Struc
         structs[-1] = Struct(round(last.e - e_sum, 1), last.desc, list(last.ij))
         return structs + branches
 
-    return _trackback_energy(structs)
 
-
+@jit
 def _trackback_energy(structs: List[Struct]) -> List[Struct]:
     """Add energy to each structure, based on how it's W(i,j) differs from the one after
 

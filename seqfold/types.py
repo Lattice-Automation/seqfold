@@ -1,7 +1,7 @@
 """Types shared between dna.py and rna.py
 """
 
-from typing import Dict, Optional, Tuple, Union, List
+from typing import Dict, Optional, Tuple, List
 
 
 Cache = List[List[float]]

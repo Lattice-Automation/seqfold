@@ -21,7 +21,7 @@ setup(
     version="0.7.7",
     description="Predict the minimum free energy structure of nucleic acids",
     author="JJTimmons",
-    author_email="jtimmons@latticeautomation.com",
+    author_email="joshua.timmons1@gmail.com",
     license="mit",
     packages=find_packages(),
     long_description=long_description,
