@@ -18,7 +18,7 @@ except VersionConflict:
 
 setup(
     name="seqfold",
-    version="0.7.7",
+    version="0.7.8",
     description="Predict the minimum free energy structure of nucleic acids",
     author="JJTimmons",
     author_email="jtimmons@latticeautomation.com",
@@ -36,6 +36,6 @@ setup(
     ],
     entry_points={"console_scripts": ["seqfold=seqfold.main:run"]},
     zip_safe=False,
-    extras_require={"dev": ["black", "pylint", "bumpversion", "Cython"]},
+    extras_require={"dev": ["black", "pylint", "bumpversion"]},
     python_requires=">=3.5",
 )
