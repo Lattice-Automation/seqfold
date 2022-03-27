@@ -18,7 +18,7 @@ except VersionConflict:
 
 setup(
     name="seqfold",
-    version="0.7.11",
+    version="0.7.12",
     description="Predict the minimum free energy structure of nucleic acids",
     author="JJTimmons",
     author_email="jtimmons@latticeautomation.com",
