@@ -1,14 +1,16 @@
 .PHONY: examples
 
+PY ?= pyp3
+
 install:
 	rm -f ./seqfold/*.c
-	pypy3 setup.py install
+	$(PY) setup.py install
 
 test:
-	pypy3 -m unittest discover tests -p '*_test.py'
+	$(PY) -m unittest discover tests -p '*_test.py'
 
 parse:
-	pypy3 ./data/_rna.py
+	$(PY) ./data/_rna.py
 	black ./seqfold/rna.py
 
 patch: test
@@ -22,7 +24,7 @@ minor: test
 	python3 -m twine upload dist/* --skip-existing
 
 examples: install
-	pypy3 ./tests/fold_examples.py
+	$(PY) ./tests/fold_examples.py
 
 profile: install
-	pypy3 ./tests/fold_profile.py
+	$(PY) ./tests/fold_profile.py

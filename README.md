@@ -31,11 +31,11 @@ pip install seqfold
 from seqfold import dg, dg_cache, fold
 
 # just returns minimum free energy
-dg("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC", temp = 37.0)  # -12.94
+dg("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC", temp = 37.0)  # -13.4
 
 # `fold` returns a list of `seqfold.Struct` from the minimum free energy structure
 structs = fold("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC")
-print(sum(s.e for s in structs))  # -12.94, same as dg()
+print(sum(s.e for s in structs))  # -13.4, same as dg()
 for struct in structs:
     print(struct) # prints the i, j, ddg, and description of each structure
 
@@ -65,7 +65,7 @@ optional arguments:
 
 ```bash
 $ seqfold GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC -t 32
--17.1
+-15.3
 ```
 
 ```bash
@@ -73,23 +73,23 @@ $ seqfold GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC -t 32 -v -l
 GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC
 ((((((((.((((......))))..((((.......)))).))))))))
    i    j    ddg  description
-   0   48   -2.2  STACK:GG/CC
-   1   47   -2.2  STACK:GG/CC
+   0   48   -1.9  STACK:GG/CC
+   1   47   -1.9  STACK:GG/CC
    2   46   -1.4  STACK:GA/CT
    3   45   -1.4  STACK:AG/TC
-   4   44   -2.2  STACK:GG/CC
+   4   44   -1.9  STACK:GG/CC
    5   43   -1.6  STACK:GT/CA
    6   42   -1.4  STACK:TC/AG
    7   41   -0.5  BIFURCATION:4n/3h
    9   22   -1.1  STACK:TT/AA
-  10   21   -1.0  STACK:TA/AT
+  10   21   -0.7  STACK:TA/AT
   11   20   -1.6  STACK:AC/TG
   12   19    3.0  HAIRPIN:CA/GG
-  25   39   -2.2  STACK:CC/GG
+  25   39   -1.9  STACK:CC/GG
   26   38   -2.3  STACK:CG/GC
-  27   37   -2.2  STACK:GG/CC
+  27   37   -1.9  STACK:GG/CC
   28   36    3.2  HAIRPIN:GT/CT
--17.1
+-15.3
 ```
 
 ### Notes
