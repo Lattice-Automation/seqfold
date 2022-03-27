@@ -1,7 +1,7 @@
 """Predict nucleic acid secondary structure"""
 
 import math
-from typing import Any, Dict, Optional, List, Tuple
+from typing import List, Tuple
 
 from .dna import DNA_ENERGIES
 from .rna import RNA_ENERGIES

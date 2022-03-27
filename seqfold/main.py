@@ -5,7 +5,7 @@ import sys
 from typing import List
 
 from . import __version__
-from .fold import dg, fold, Struct
+from .fold import fold, Struct
 
 
 def run():
@@ -15,7 +15,7 @@ def run():
     args = parse_args(sys.argv[1:])
     structs = fold(args.seq, temp=args.temp)
 
-    if args.verbose:
+    if args.verbose or args.dot_bracket:
         # log structure with dot-bracket notation
         desc = ["."] * len(args.seq)
         for s in structs:
@@ -26,7 +26,7 @@ def run():
         print(args.seq)
         print("".join(desc))
 
-    if args.log:
+    if args.log or args.sub_structures:
         # log each structure
         print(Struct.fmt.format("i", "j", "ddg", "description"))
         for s in structs:
@@ -58,24 +58,43 @@ def parse_args(args: List[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "-t",
+        "--celcius",
         dest="temp",
         type=float,
         metavar="FLOAT",
         default=37.0,
         help="temperature in Celsius",
     )
+
+    # I'm hiding these flags because 1. they're an embarassing testament
+    # to me not really knowing at the time what the --verbose flag is for
+    # 2. both point out the glaring lack of logging in this tool
     parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
-        help="log a dot-bracket of the MFE folding",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "-l",
         "--log",
         action="store_true",
-        help="log each substructure in the MFE folding",
+        help=argparse.SUPPRESS,
     )
+
+    parser.add_argument(
+        "-d",
+        "--dot-bracket",
+        action="store_true",
+        help="write a dot-bracket of the MFE folding to stdout",
+    )
+    parser.add_argument(
+        "-r",
+        "--sub-structures",
+        action="store_true",
+        help="write each substructure of the MFE folding to stdout",
+    )
+
     parser.add_argument(
         "--version", action="version", version="seqfold {ver}".format(ver=__version__)
     )

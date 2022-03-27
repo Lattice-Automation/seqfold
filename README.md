@@ -46,30 +46,31 @@ cache = dg_cache("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC")
 ### CLI
 
 ```txt
-usage: seqfold [-h] [-t FLOAT] [-v] [-l] [--version] SEQ
+usage: seqfold [-h] [-t FLOAT] [-d] [-r] [--version] SEQ
 
 Predict the minimum free energy (kcal/mol) of a nucleic acid sequence
 
 positional arguments:
-  SEQ            nucleic acid sequence to fold
+  SEQ                   nucleic acid sequence to fold
 
 optional arguments:
-  -h, --help     show this help message and exit
-  -t FLOAT       temperature in Celsius
-  -v, --verbose  log a dot-bracket of the MFE structure
-  -l, --log      log each substructure in the MFE folding
-  --version      show program's version number and exit
+  -h, --help            show this help message and exit
+  -t FLOAT, --celcius FLOAT
+                        temperature in Celsius
+  -d, --dot-bracket     write a dot-bracket of the MFE folding to stdout
+  -r, --sub-structures  write each substructure of the MFE folding to stdout
+  --version             show program's version number and exit
 ```
 
 #### Examples
 
 ```bash
-$ seqfold GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC -t 32
+$ seqfold GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC --celcius 32
 -15.3
 ```
 
 ```bash
-$ seqfold GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC -t 32 -v -l
+$ seqfold GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC --celcius 32 --dot-bracket --sub-structures
 GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC
 ((((((((.((((......))))..((((.......)))).))))))))
    i    j    ddg  description
