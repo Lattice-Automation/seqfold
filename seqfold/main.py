@@ -5,26 +5,19 @@ import sys
 from typing import List
 
 from . import __version__
-from .fold import fold, Struct
+from .fold import fold, dot_bracket, Struct
 
 
 def run():
-    """Entry point for console_scripts.
-    """
+    """Entry point for console_scripts."""
 
     args = parse_args(sys.argv[1:])
     structs = fold(args.seq, temp=args.temp)
 
     if args.verbose or args.dot_bracket:
         # log structure with dot-bracket notation
-        desc = ["."] * len(args.seq)
-        for s in structs:
-            if len(s.ij) == 1:
-                i, j = s.ij[0]
-                desc[i] = "("
-                desc[j] = ")"
         print(args.seq)
-        print("".join(desc))
+        print(dot_bracket(structs))
 
     if args.log or args.sub_structures:
         # log each structure

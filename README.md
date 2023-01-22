@@ -28,7 +28,7 @@ pip install seqfold
 ### Python
 
 ```python
-from seqfold import dg, dg_cache, fold
+from seqfold import fold, dg, dg_cache, dot_bracket
 
 # just returns minimum free energy
 dg("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC", temp = 37.0)  # -13.4
@@ -37,10 +37,13 @@ dg("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC", temp = 37.0)  # -13.4
 structs = fold("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC")
 print(sum(s.e for s in structs))  # -13.4, same as dg()
 for struct in structs:
-    print(struct) # prints the i, j, ddg, and description of each structure
+    print(struct)  # prints the i, j, ddg, and description of each structure
 
 # `dg_cache` returns a 2D array where each (i,j) combination returns the MFE from i to j inclusive
 cache = dg_cache("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC")
+
+# `dot_bracket` returns a dot_bracket representation of the folding
+print(dot_bracket(structs))  # ((((((((.((((......))))..((((.......)))).))))))))
 ```
 
 ### CLI

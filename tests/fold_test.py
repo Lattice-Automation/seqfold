@@ -1,15 +1,13 @@
 """Test DNA/RNA folding."""
 
 from os import path
-from time import time
 import unittest
 
-from seqfold import dg, dg_cache, fold, Cache, Struct
+from seqfold import dg, dg_cache, dot_bracket, fold, Cache, Struct
 from seqfold.dna import DNA_ENERGIES
 from seqfold.rna import RNA_ENERGIES
 from seqfold.fold import (
     STRUCT_DEFAULT,
-    _traceback,
     _bulge,
     _stack,
     _hairpin,
@@ -89,6 +87,16 @@ class TestFold(unittest.TestCase):
             # accepting a 5% difference
             delta = abs(0.5 * min(d, ufold))
             self.assertAlmostEqual(d, ufold, delta=delta)
+
+    def test_dot_bracket(self):
+        """Get the dot bracket notation for a folded structure."""
+
+        seq = "GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC"
+        structs = fold(seq)
+
+        self.assertEqual(
+            "((((((((.((((......))))..((((.......)))).))))))))", dot_bracket(structs)
+        )
 
     def test_multibranch(self):
         """Fold a multibranch structure."""
@@ -215,4 +223,3 @@ class TestFold(unittest.TestCase):
         for row in cache:
             rows.append(",".join(str(s.desc) if s else "." for s in row))
         print("\n".join(rows))
-

@@ -45,7 +45,7 @@ Structs = List[List[Struct]]
 
 
 def fold(seq: str, temp: float = 37.0) -> List[Struct]:
-    """Fold the DNA sequence and return lowest free energy score.
+    """Fold the DNA sequence and return the lowest free energy score.
 
     Based on the approach described in:
     Zuker and Stiegler, 1981
@@ -78,7 +78,7 @@ def dg(seq: str, temp: float = 37.0) -> float:
 
     Args:
         seq: The sequence to fold
-    
+
     Keyword Args:
         temp: The temperature to fold at
 
@@ -95,10 +95,10 @@ def dg_cache(seq: str, temp: float = 37.0) -> Cache:
 
     Args:
         seq: The nucleic acid sequence to fold
-    
+
     Keyword Args:
         temp: The temperature to fold at
-    
+
     Returns:
         Cache: A 2D matrix where each (i, j) pairing corresponds to the
             minimum free energy between i and j
@@ -113,6 +113,26 @@ def dg_cache(seq: str, temp: float = 37.0) -> Cache:
     return cache
 
 
+def dot_bracket(structs: List[Struct]) -> str:
+    """Get the dot bracket notation for a secondary structure.
+
+    Args:
+        structs: A list of structs, usually from the fold function
+
+    Returns:
+        str: The dot bracket notation of the secondary structure
+    """
+
+    # log structure with dot-bracket notation
+    result = ["."] * (max(j for s in structs for _, j in s.ij) + 1)
+    for s in structs:
+        if len(s.ij) == 1:
+            i, j = s.ij[0]
+            result[i] = "("
+            result[j] = ")"
+    return "".join(result)
+
+
 def _cache(seq: str, temp: float = 37.0) -> Tuple[Structs, Structs]:
     """Create caches for the w_cache and v_cache
 
@@ -121,10 +141,10 @@ def _cache(seq: str, temp: float = 37.0) -> Tuple[Structs, Structs]:
 
     Args:
         seq: The sequence to fold
-    
+
     Keyword Args:
         temp: The temperature to fold at
-    
+
     Returns:
         (Structs, Structs): The w_cache and the v_cache for traversal later
     """
@@ -344,7 +364,7 @@ def _pair(s: str, i: int, i1: int, j: int, j1: int) -> str:
         i1: index to right of i
         j: rightmost index
         j1: index to left of j
-    
+
     Returns:
         str: string representation of the pair
     """
@@ -363,7 +383,7 @@ def _min_struct(*structs: Struct) -> Struct:
 
     Args:
         structs: Structures being compared
-    
+
     Returns:
         struct: The min free energy structure
     """
@@ -672,7 +692,7 @@ def _multi_branch(
         w_cache: Structs of min energy of substructures between W(i,j)
         helix: Whether this multibranch is enclosed by a helix
         emap: Map to DNA/RNA energies
-    
+
     Keyword Args:
         helix: Whether V(i, j) bond with one another in a helix
 

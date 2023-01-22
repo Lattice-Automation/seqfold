@@ -10,6 +10,6 @@ except DistributionNotFound:
 finally:
     del get_distribution, DistributionNotFound
 
-from .fold import fold, dg, dg_cache, fold, Struct
+from .fold import fold, dg, dg_cache, fold, Struct, dot_bracket
 from .tm import tm, tm_cache, gc_cache
 from .types import Cache
