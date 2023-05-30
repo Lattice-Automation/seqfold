@@ -43,7 +43,7 @@ for struct in structs:
 cache = dg_cache("GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC")
 
 # `dot_bracket` returns a dot_bracket representation of the folding
-print(dot_bracket(structs))  # ((((((((.((((......))))..((((.......)))).))))))))
+print(dot_bracket(seq, structs))  # ((((((((.((((......))))..((((.......)))).))))))))
 ```
 
 ### CLI
