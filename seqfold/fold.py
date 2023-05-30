@@ -113,7 +113,7 @@ def dg_cache(seq: str, temp: float = 37.0) -> Cache:
     return cache
 
 
-def dot_bracket(structs: List[Struct]) -> str:
+def dot_bracket(seq: str, structs: List[Struct]) -> str:
     """Get the dot bracket notation for a secondary structure.
 
     Args:
@@ -124,7 +124,7 @@ def dot_bracket(structs: List[Struct]) -> str:
     """
 
     # log structure with dot-bracket notation
-    result = ["."] * (max(j for s in structs for _, j in s.ij) + 1)
+    result = ["."] * len(seq)
     for s in structs:
         if len(s.ij) == 1:
             i, j = s.ij[0]

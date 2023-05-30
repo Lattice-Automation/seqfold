@@ -17,7 +17,7 @@ def run():
     if args.verbose or args.dot_bracket:
         # log structure with dot-bracket notation
         print(args.seq)
-        print(dot_bracket(structs))
+        print(dot_bracket(args.seq, structs))
 
     if args.log or args.sub_structures:
         # log each structure

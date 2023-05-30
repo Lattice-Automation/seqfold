@@ -95,8 +95,12 @@ class TestFold(unittest.TestCase):
         structs = fold(seq)
 
         self.assertEqual(
-            "((((((((.((((......))))..((((.......)))).))))))))", dot_bracket(structs)
+            "((((((((.((((......))))..((((.......)))).))))))))", dot_bracket(seq, structs)
         )
+
+        seq = "ACGCTCACCGTGCCCAGTGAGCGA"
+        structs = fold(seq)
+        self.assertEqual(len(seq), len(dot_bracket(seq, structs)))
 
     def test_multibranch(self):
         """Fold a multibranch structure."""

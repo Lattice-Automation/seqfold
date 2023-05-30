@@ -1,6 +1,6 @@
 .PHONY: examples
 
-PY ?= pyp3
+PY ?= python3
 
 install:
 	rm -f ./seqfold/*.c
