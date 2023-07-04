@@ -8,7 +8,7 @@ Predict the minimum free energy structure of nucleic acids.
 
 ## Installation
 
-### pypy3 (strongly recommended)
+### pypy3 (recommended)
 
 ```bash
 pypy3 -m ensurepip
@@ -17,7 +17,15 @@ pypy3 -m pip install seqfold
 
 For a 200bp sequence (on my laptop), [pypy3](https://doc.pypy.org/en/latest/index.html) takes 2.5 seconds versus 15 seconds for CPython.
 
-### Default pip
+### Conda
+
+```bash
+conda install -c bioconda seqfold
+```
+
+Thank you to [@jonas-fuchs](https://github.com/jonas-fuchs) for this
+
+### pip
 
 ```bash
 pip install seqfold
