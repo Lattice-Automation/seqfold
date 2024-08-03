@@ -1,9 +1,8 @@
 """Test DNA/RNA folding."""
 
-from os import path
 import unittest
 
-from seqfold import dg, dg_cache, dot_bracket, fold, Cache, Struct
+from seqfold import dg, dg_cache, dot_bracket, fold
 from seqfold.dna import DNA_ENERGIES
 from seqfold.rna import RNA_ENERGIES
 from seqfold.fold import (
@@ -79,13 +78,14 @@ class TestFold(unittest.TestCase):
             "UGGGAGGUCGUCUAACGGUAGGACGGCGGACUCUGGAUCCGCUGGUGGAGGUUCGAGUCCUCCCCUCCCAGCCA": -32.8,
             "GGGCGAUGAGGCCCGCCCAAACUGCCCUGAAAAGGGCUGAUGGCCUCUACUG": -20.7,
             "GGGGGCAUAGCUCAGCUGGGAGAGCGCCUGCUUUGCACGCAGGAGGUCUGCGGUUCGAUCCCGCGCGCUCCCACCA": -31.4,
+            "CAGCGCGGCGGGCGGGAGUCCGGCGCGCCCUCCAUCCCCGGCGGCGUCGGCAAGGAGUAG": -18.26,
         }
 
         for seq, ufold in unafold_dgs.items():
             d = dg(seq, temp=37.0)
 
-            # accepting a 5% difference
-            delta = abs(0.5 * min(d, ufold))
+            # accepting a 30% difference
+            delta = abs(0.3 * min(d, ufold))
             self.assertAlmostEqual(d, ufold, delta=delta)
 
     def test_dot_bracket(self):
@@ -95,7 +95,8 @@ class TestFold(unittest.TestCase):
         structs = fold(seq)
 
         self.assertEqual(
-            "((((((((.((((......))))..((((.......)))).))))))))", dot_bracket(seq, structs)
+            "((((((((.((((......))))..((((.......)))).))))))))",
+            dot_bracket(seq, structs),
         )
 
         seq = "ACGCTCACCGTGCCCAGTGAGCGA"
@@ -110,6 +111,13 @@ class TestFold(unittest.TestCase):
         structs = fold(seq)
         self.assertTrue(
             any("BIFURCATION" in s.desc and (7, 41) in s.ij for s in structs)
+        )
+
+        seq = "CAGCGCGGCGGGCGGGAGUCCGGCGCGCCCUCCAUCCCCGGCGGCGUCGGCAAGGAGUAG"
+
+        structs = fold(seq)
+        self.assertTrue(
+            any("BIFURCATION" in s.desc and (2, 56) in s.ij for s in structs)
         )
 
     def test_pair(self):

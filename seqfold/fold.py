@@ -87,7 +87,8 @@ def dg(seq: str, temp: float = 37.0) -> float:
     """
 
     structs = fold(seq, temp)
-    return round(sum(s.e for s in structs), 2)
+    dg_sum = sum(s.e for s in structs)
+    return round(dg_sum, 2)
 
 
 def dg_cache(seq: str, temp: float = 37.0) -> Cache:
@@ -265,6 +266,7 @@ def _v(
     if emap.COMPLEMENT[seq[i]] != seq[j]:
         v_cache[i][j] = STRUCT_NULL
         return v_cache[i][j]
+
     # if the basepair is isolated, and the seq large, penalize at 1,600 kcal/mol
     # heuristic for speeding this up
     # from https://www.ncbi.nlm.nih.gov/pubmed/10329189
@@ -827,45 +829,48 @@ def _traceback(i: int, j: int, v_cache: Structs, w_cache: Structs) -> List[Struc
     """
 
     # move i,j down-left to start coordinates
-    s = w_cache[i][j]
-    if "HAIRPIN" not in s.desc:
-        while w_cache[i + 1][j] == s:
+    s_w = w_cache[i][j]
+    if "HAIRPIN" not in s_w.desc:
+        while w_cache[i + 1][j] == s_w:
             i += 1
-        while w_cache[i][j - 1] == s:
+        while w_cache[i][j - 1] == s_w:
             j -= 1
 
     structs: List[Struct] = []
     while True:
-        s = v_cache[i][j]
-        structs.append(s.with_ij([(i, j)]))
+        s_v = v_cache[i][j]
 
-        # it's a hairpin, end of structure
-        if not s.ij:
-            # set the energy of everything relative to the hairpin
-            return _trackback_energy(structs)
+        # multibrach structures are only in the w_cache.
+        if len(s_w.ij) > 1:
+            s_v = s_w
+
+        structs.append(s_v.with_ij([(i, j)]))
+
+        # it's a multibranch
+        if len(s_v.ij) > 1:
+            e_sum = 0.0
+            structs = _trackback_energy(structs)
+            branches: List[Struct] = []
+            for i1, j1 in s_v.ij:
+                tb = _traceback(i1, j1, v_cache, w_cache)
+                if tb and tb[0].ij:
+                    i2, j2 = tb[0].ij[0]
+                    e_sum += w_cache[i2][j2].e
+                    branches += tb
+
+            last = structs[-1]
+            structs[-1] = Struct(round(last.e - e_sum, 1), last.desc, list(last.ij))
+            return structs + branches
 
         # it's a stack, bulge, etc
         # there's another single structure beyond this
-        if len(s.ij) == 1:
-            i, j = s.ij[0]
+        if len(s_v.ij) == 1:
+            i, j = s_v.ij[0]
             continue
 
-        # it's a multibranch
-        e_sum = 0.0
-        structs = _trackback_energy(structs)
-        branches: List[Struct] = []
-        for i1, j1 in s.ij:
-            tb = _traceback(i1, j1, v_cache, w_cache)
-            if tb and tb[0].ij:
-                i2, j2 = tb[0].ij[0]
-                e_sum += w_cache[i2][j2].e
-                branches += tb
-
-        last = structs[-1]
-        structs[-1] = Struct(round(last.e - e_sum, 1), last.desc, list(last.ij))
-        return structs + branches
-
-    return _trackback_energy(structs)
+        # it's a hairpin, end of structure
+        # set the energy of everything relative to the hairpin
+        return _trackback_energy(structs)
 
 
 def _trackback_energy(structs: List[Struct]) -> List[Struct]:
@@ -881,7 +886,6 @@ def _trackback_energy(structs: List[Struct]) -> List[Struct]:
     structs_e: List[Struct] = []
     for index, struct in enumerate(structs):
         e_next = 0.0 if index == len(structs) - 1 else structs[index + 1].e
-        structs_e.append(
-            Struct(round(struct.e - e_next, 1), struct.desc, list(struct.ij))
-        )
+        e_corrected = round(struct.e - e_next, 1)
+        structs_e.append(Struct(e_corrected, struct.desc, list(struct.ij)))
     return structs_e

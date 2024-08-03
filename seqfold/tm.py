@@ -1,7 +1,7 @@
 """Calculate the tm of a DNA sequence"""
 
 import math
-from typing import List, Tuple
+from typing import Tuple
 
 from .dna import DNA_COMPLEMENT, DNA_ENERGIES
 from .types import Cache
@@ -144,10 +144,10 @@ def tm_cache(seq1: str, seq2: str = "", pcr: bool = True) -> Cache:
 
 def gc_cache(seq: str) -> Cache:
     """Return the GC ratio of each range, between i and j, in the sequence
-    
+
     Args:
         seq: The sequence whose tm we're querying
-    
+
     Returns:
         Cache: A cache for GC ratio lookup
     """
@@ -186,10 +186,10 @@ def _parse_input(seq1: str, seq2: str = "") -> Tuple[str, str]:
 
     Args:
         seq1: The main sequence whose tm is being calculated
-    
+
     Keyword Args:
         seq2: The second sequence that seq2 is annealing to
-    
+
     Returns:
         (str, str): The sequences to use for tm calculation
     """

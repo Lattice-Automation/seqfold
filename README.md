@@ -23,7 +23,7 @@ For a 200bp sequence (on my laptop), [pypy3](https://doc.pypy.org/en/latest/inde
 conda install -c bioconda seqfold
 ```
 
-Thank you to [@jonas-fuchs](https://github.com/jonas-fuchs) for this
+Thank you to [@jonas-fuchs](https://github.com/jonas-fuchs) for this.
 
 ### pip
 

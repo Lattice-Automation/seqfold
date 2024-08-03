@@ -1,7 +1,5 @@
 """RNA enthalpy and entropy change parameters."""
 
-from typing import Dict, Tuple
-
 from .types import Comp, MultiBranch, BpEnergy, LoopEnergy, Energies
 
 RNA_COMPLEMENT: Comp = {"A": "U", "U": "A", "G": "C", "C": "G", "N": "N"}

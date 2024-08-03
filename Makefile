@@ -4,7 +4,7 @@ PY ?= python3
 
 install:
 	rm -f ./seqfold/*.c
-	$(PY) setup.py install
+	$(PY) -m pip install .
 
 test:
 	$(PY) -m unittest discover tests -p '*_test.py'
@@ -15,14 +15,15 @@ parse:
 
 patch: test
 	bumpversion patch
-	python3 setup.py sdist bdist_wheel
-	python3 -m twine upload dist/* --skip-existing
+	$(PY) setup.py sdist bdist_wheel
+	$(PY) -m twine upload dist/* --skip-existing
 
 minor: test
 	bumpversion minor
-	python3 setup.py sdist bdist_wheel
-	python3 -m twine upload dist/* --skip-existing
+	$(PY) setup.py sdist bdist_wheel
+	$(PY) -m twine upload dist/* --skip-existing
 
+.PHONY: examples
 examples: install
 	$(PY) ./tests/fold_examples.py
 

@@ -1,7 +1,5 @@
 """DNA enthalpy and entropy change parameters."""
 
-from typing import Any, Dict, Tuple
-
 from .types import Comp, MultiBranch, BpEnergy, LoopEnergy, Energies
 
 
@@ -505,4 +503,3 @@ DNA_ENERGIES = Energies(
     DNA_TERMINAL_MM,
     DNA_TRI_TETRA_LOOPS,
 )
-
