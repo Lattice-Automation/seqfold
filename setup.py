@@ -1,6 +1,3 @@
-import sys
-
-from pkg_resources import VersionConflict, require
 from setuptools import setup, find_packages
 
 
@@ -9,12 +6,6 @@ with open("README.md", "r") as fh:
 
 with open("requirements.txt") as f:
     requirements = f.read().splitlines()
-
-try:
-    require("setuptools>=38.3")
-except VersionConflict:
-    print("Error: version of setuptools is too old (<38.3)!")
-    sys.exit(1)
 
 setup(
     name="seqfold",
