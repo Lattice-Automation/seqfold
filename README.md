@@ -6,7 +6,7 @@ Predict the minimum free energy structure of nucleic acids.
 
 `seqfold` is an implementation of the `Zuker, 1981` dynamic programming algorithm, the basis for [UNAFold](http://unafold.rna.albany.edu/?q=DINAMelt/software)/[mfold](https://www.ibridgenetwork.org/#!/profiles/1045554571442/innovations/1/), with energy functions from `SantaLucia, 2004` (DNA) and `Turner, 2009` (RNA).
 
-The folding/Tm engine is written in **Rust** and exposed to Python through [PyO3](https://pyo3.rs)/[maturin](https://www.maturin.rs). The Python API (`fold`, `dg`, `dg_cache`, `dot_bracket`, `tm`, `tm_cache`, `gc_cache`) and the `seqfold` CLI are unchanged, so it remains a drop-in `pip install`.
+The folding/Tm engine is written in **Rust** and exposed to Python through [PyO3](https://pyo3.rs)/[maturin](https://www.maturin.rs).
 
 ## Installation
 
@@ -34,16 +34,6 @@ pip install seqfold
 ```
 
 Prebuilt wheels include the compiled Rust extension, so no Rust toolchain is needed to install.
-
-### From source
-
-Building from a source checkout requires a [Rust toolchain](https://rustup.rs) and [maturin](https://www.maturin.rs):
-
-```bash
-pip install maturin
-maturin develop --release   # build + install into the active environment
-# or: pip install .         # uses the maturin build backend from pyproject.toml
-```
 
 ## Usage
 
