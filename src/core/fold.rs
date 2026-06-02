@@ -19,12 +19,33 @@ const NEG_INF: f64 = f64::NEG_INFINITY;
 /// ones run sequentially (thread overhead outweighs the work).
 const PARALLEL_THRESHOLD: usize = 64;
 
+/// A compact descriptor of a structure, stored in the DP caches in place of a
+/// formatted label. The human-readable `desc` string is rendered only for the
+/// handful of structures that end up in the traceback (see [`render_desc`]),
+/// which avoids O(n^3) `format!` allocations (and the cross-thread allocator
+/// contention they cause) during the fill.
+#[derive(Clone, Debug, PartialEq)]
+enum Desc {
+    /// No label (sentinels, the isolated-pair penalty).
+    None,
+    /// A hairpin closed at (i, j).
+    Hairpin,
+    /// A stack / bulge / interior loop; the exact label is reconstructed from
+    /// (i, j) and the inner pair (ij[0]) at render time.
+    Pair,
+    /// A multi-branch structure; carries the counts the label needs.
+    Bifurcation { unpaired: i64, count: usize },
+}
+
 /// A single structure with a free energy, description, and inward children.
 #[derive(Clone, Debug)]
 pub struct Struct {
     pub e: f64,
+    /// Rendered label. Empty for cache cells; filled in for traceback output.
     pub desc: String,
     pub ij: Vec<(i64, i64)>,
+    /// Compact descriptor used during the fill (cache cells only).
+    tag: Desc,
 }
 
 /// Python's `Struct.__eq__` compares only `e` and `ij` (not `desc`).
@@ -35,42 +56,78 @@ impl PartialEq for Struct {
 }
 
 impl Struct {
+    /// Construct an output structure with an already-rendered label.
     pub fn new(e: f64, desc: &str, ij: Vec<(i64, i64)>) -> Struct {
         Struct {
             e,
             desc: desc.to_string(),
             ij,
+            tag: Desc::None,
+        }
+    }
+
+    /// Construct a cache cell carrying a compact tag (no label allocation).
+    fn tagged(e: f64, tag: Desc, ij: Vec<(i64, i64)>) -> Struct {
+        Struct {
+            e,
+            desc: String::new(),
+            ij,
+            tag,
         }
     }
 
     /// The `STRUCT_DEFAULT` sentinel: `Struct(-inf)` with an empty `ij`.
     pub fn default_() -> Struct {
-        Struct {
-            e: NEG_INF,
-            desc: String::new(),
-            ij: Vec::new(),
-        }
+        Struct::tagged(NEG_INF, Desc::None, Vec::new())
     }
 
     /// The `STRUCT_NULL` sentinel: `Struct(inf)` with an empty `ij`.
     pub fn null() -> Struct {
-        Struct {
-            e: INF,
-            desc: String::new(),
-            ij: Vec::new(),
-        }
+        Struct::tagged(INF, Desc::None, Vec::new())
     }
 
     /// Python `__bool__`: false when the energy is +/- infinity.
     pub fn truthy(&self) -> bool {
         self.e != INF && self.e != NEG_INF
     }
+}
 
-    fn with_ij(&self, ij: Vec<(i64, i64)>) -> Struct {
-        Struct {
-            e: self.e,
-            desc: self.desc.clone(),
-            ij,
+/// Reconstruct the human-readable label for a structure at cell (i, j).
+fn render_desc(tag: &Desc, s: &[u8], i: usize, j: usize, inner: Option<(i64, i64)>, n: usize) -> String {
+    match tag {
+        Desc::None => String::new(),
+        Desc::Hairpin => format!(
+            "HAIRPIN:{}",
+            pair_str(s, i as i64, i as i64 + 1, j as i64, j as i64 - 1)
+        ),
+        Desc::Bifurcation { unpaired, count } => {
+            format!("BIFURCATION:{}n/{}h", unpaired, count)
+        }
+        Desc::Pair => {
+            let (i1i, j1i) = inner.expect("pair desc needs an inner pair");
+            let (i1, j1) = (i1i as usize, j1i as usize);
+            if i1 == i + 1 && j1 == j - 1 {
+                // stacking pair (possibly with a dangling end)
+                let pair = pair_str(s, i as i64, i1i, j as i64, j1i);
+                if (i > 0 && j == n - 1) || (i == 0 && j < n - 1) {
+                    format!("STACK_DE:{}", pair)
+                } else {
+                    format!("STACK:{}", pair)
+                }
+            } else if i1 > i + 1 && j1 == j - 1 {
+                format!("BULGE:{}", i1 - i)
+            } else if i1 == i + 1 && j1 < j - 1 {
+                format!("BULGE:{}", j - j1)
+            } else if i1 - i == 2 && j - j1 == 2 {
+                // technically an interior loop of 1; really a 1bp mismatch
+                let loop_left = std::str::from_utf8(&s[i..=i1]).unwrap();
+                let mut loop_right_rev: Vec<u8> = s[j1..=j].to_vec();
+                loop_right_rev.reverse();
+                let loop_right_rev = String::from_utf8(loop_right_rev).unwrap();
+                format!("STACK:{}/{}", loop_left, loop_right_rev)
+            } else {
+                format!("INTERIOR_LOOP:{}/{}", i1 - i, j - j1)
+            }
         }
     }
 }
@@ -105,8 +162,10 @@ fn code4(s: &[u8], i: i64, i1: i64, j: i64, j1: i64) -> usize {
 /// Fold the sequence and return the list of minimum-free-energy structures.
 pub fn fold(seq: &str, temp: f64) -> Result<Vec<Struct>, FoldError> {
     let (v_cache, w_cache) = cache(seq, temp)?;
-    let n = seq.len();
-    Ok(traceback(0, n - 1, &v_cache, &w_cache))
+    // traceback renders labels from the (upper-cased) sequence, matching cache()
+    let upper = seq.to_uppercase();
+    let s = upper.as_bytes();
+    Ok(traceback(s, 0, s.len() - 1, &v_cache, &w_cache))
 }
 
 /// Fold and return just the rounded delta-G of the structure.
@@ -281,27 +340,23 @@ fn compute_v(
     let isolated_inner = comp(emap, s[i + 1]) != s[j - 1];
 
     if isolated_outer && isolated_inner {
-        return Struct::new(1600.0, "", Vec::new());
+        return Struct::tagged(1600.0, Desc::None, Vec::new());
     }
 
-    // E1 = FH(i, j); hairpin
-    let pair = pair_str(s, i as i64, i as i64 + 1, j as i64, j as i64 - 1);
-    let e1 = Struct::new(hairpin(s, i, j, temp, emap), &format!("HAIRPIN:{}", pair), Vec::new());
+    // E1 = FH(i, j); hairpin. The label is reconstructed at traceback time.
+    let e1 = Struct::tagged(hairpin(s, i, j, temp, emap), Desc::Hairpin, Vec::new());
     if j - i == 4 {
         return e1;
     }
 
     // E2 = min{FL(i, j, i', j') + V(i', j')}, i<i'<j'<j
     //
-    // The energy of each candidate is computed with dense-table lookups; the
-    // `desc` string for the *winner* (if any) is built once, after the search,
-    // rather than for every candidate. `STACK_DE` and the left pair's NN
-    // membership depend only on (i, j), so they are hoisted out of the loops.
-    let mut e2 = Struct::new(INF, "", Vec::new());
-    // tag: 0 = stack, 1 = interior loop, 2 = bulge-left, 3 = bulge-right
-    let mut best: Option<(f64, usize, usize, u8)> = None;
+    // Only the energy and the winning inner pair are tracked; the exact label
+    // (STACK / BULGE / INTERIOR_LOOP / ...) is reconstructed from those indices
+    // at traceback time, so no strings are built during the search.
+    let mut e2 = Struct::tagged(INF, Desc::None, Vec::new());
+    let mut best: Option<(f64, usize, usize)> = None;
     if j >= 4 {
-        let stack_de = (i > 0 && j == n - 1) || (i == 0 && j < n - 1);
         let pair_inner_left =
             emap.nn_t[code4(s, i as i64, i as i64 + 1, j as i64, j as i64 - 1)].is_some();
 
@@ -316,10 +371,8 @@ fn compute_v(
                 let bulge_right = j1 < j - 1;
 
                 let mut e2_test: f64;
-                let tag: u8;
                 if stack {
                     e2_test = stack_e(s, i as i64, i1 as i64, j as i64, j1 as i64, temp, emap);
-                    tag = 0;
                 } else if bulge_left && bulge_right && {
                     let pair_inner = pair_inner_left
                         || emap.nn_t[code4(s, i1 as i64 - 1, i1 as i64, j1 as i64 + 1, j1 as i64)]
@@ -328,13 +381,10 @@ fn compute_v(
                 } {
                     e2_test =
                         internal_loop(s, i as i64, i1 as i64, j as i64, j1 as i64, temp, emap);
-                    tag = 1;
                 } else if bulge_left && !bulge_right {
                     e2_test = bulge(s, i as i64, i1 as i64, j as i64, j1 as i64, temp, emap);
-                    tag = 2;
                 } else if !bulge_left && bulge_right {
                     e2_test = bulge(s, i as i64, i1 as i64, j as i64, j1 as i64, temp, emap);
-                    tag = 3;
                 } else {
                     continue;
                 }
@@ -342,37 +392,13 @@ fn compute_v(
                 e2_test += v_cache[i1][j1].e;
                 let cur = best.map_or(INF, |b| b.0);
                 if e2_test != NEG_INF && e2_test < cur {
-                    best = Some((e2_test, i1, j1, tag));
+                    best = Some((e2_test, i1, j1));
                 }
             }
         }
 
-        if let Some((e2_test, i1, j1, tag)) = best {
-            let desc = match tag {
-                0 => {
-                    let pair = pair_str(s, i as i64, i1 as i64, j as i64, j1 as i64);
-                    if stack_de {
-                        format!("STACK_DE:{}", pair)
-                    } else {
-                        format!("STACK:{}", pair)
-                    }
-                }
-                1 => {
-                    if i1 - i == 2 && j - j1 == 2 {
-                        // technically an interior loop of 1; really a 1bp mismatch
-                        let loop_left = std::str::from_utf8(&s[i..=i1]).unwrap();
-                        let mut loop_right_rev: Vec<u8> = s[j1..=j].to_vec();
-                        loop_right_rev.reverse();
-                        let loop_right_rev = String::from_utf8(loop_right_rev).unwrap();
-                        format!("STACK:{}/{}", loop_left, loop_right_rev)
-                    } else {
-                        format!("INTERIOR_LOOP:{}/{}", i1 - i, j - j1)
-                    }
-                }
-                2 => format!("BULGE:{}", i1 - i),
-                _ => format!("BULGE:{}", j - j1),
-            };
-            e2 = Struct::new(e2_test, &desc, vec![(i1 as i64, j1 as i64)]);
+        if let Some((e2_test, i1, j1)) = best {
+            e2 = Struct::tagged(e2_test, Desc::Pair, vec![(i1 as i64, j1 as i64)]);
         }
     }
 
@@ -711,17 +737,21 @@ fn mb(
         branches.pop();
     }
 
-    Struct::new(
+    Struct::tagged(
         e,
-        &format!("BIFURCATION:{}n/{}h", unpaired, branches_count),
+        Desc::Bifurcation {
+            unpaired,
+            count: branches_count,
+        },
         branches,
     )
 }
 
 /// Traceback through the V and W caches to build the structure list.
-fn traceback(mut i: usize, mut j: usize, v_cache: &Cache, w_cache: &Cache) -> Vec<Struct> {
+fn traceback(s: &[u8], mut i: usize, mut j: usize, v_cache: &Cache, w_cache: &Cache) -> Vec<Struct> {
+    let n = s.len();
     let s_w = w_cache[i][j].clone();
-    if !s_w.desc.contains("HAIRPIN") {
+    if s_w.tag != Desc::Hairpin {
         while w_cache[i + 1][j] == s_w {
             i += 1;
         }
@@ -739,7 +769,9 @@ fn traceback(mut i: usize, mut j: usize, v_cache: &Cache, w_cache: &Cache) -> Ve
             s_v = s_w.clone();
         }
 
-        structs.push(s_v.with_ij(vec![(i as i64, j as i64)]));
+        // render the label now, while both (i, j) and the inner pair are known
+        let desc = render_desc(&s_v.tag, s, i, j, s_v.ij.first().copied(), n);
+        structs.push(Struct::new(s_v.e, &desc, vec![(i as i64, j as i64)]));
 
         // it's a multibranch
         if s_v.ij.len() > 1 {
@@ -747,7 +779,7 @@ fn traceback(mut i: usize, mut j: usize, v_cache: &Cache, w_cache: &Cache) -> Ve
             structs = trackback_energy(&structs);
             let mut branches: Vec<Struct> = Vec::new();
             for &(i1, j1) in &s_v.ij {
-                let tb = traceback(i1 as usize, j1 as usize, v_cache, w_cache);
+                let tb = traceback(s, i1 as usize, j1 as usize, v_cache, w_cache);
                 if !tb.is_empty() && !tb[0].ij.is_empty() {
                     let (i2, j2) = tb[0].ij[0];
                     e_sum += w_cache[i2 as usize][j2 as usize].e;
@@ -756,8 +788,8 @@ fn traceback(mut i: usize, mut j: usize, v_cache: &Cache, w_cache: &Cache) -> Ve
             }
 
             let last = structs.last().unwrap().clone();
-            let n = structs.len();
-            structs[n - 1] = Struct::new(pyround(last.e - e_sum, 1), &last.desc, last.ij.clone());
+            let m = structs.len();
+            structs[m - 1] = Struct::new(pyround(last.e - e_sum, 1), &last.desc, last.ij.clone());
             structs.extend(branches);
             return structs;
         }
