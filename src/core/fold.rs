@@ -88,8 +88,16 @@ fn ch(s: &[u8], i: i64) -> char {
     }
 }
 
+#[inline(always)]
 fn comp(emap: &Energies, b: u8) -> u8 {
-    emap.complement[&b]
+    emap.comp_lut[b as usize]
+}
+
+/// Pack the four (possibly dangling) indices into a dense-table code.
+#[inline(always)]
+fn code4(s: &[u8], i: i64, i1: i64, j: i64, j1: i64) -> usize {
+    let g = |x: i64| if x < 0 { b'.' } else { s[x as usize] };
+    energies::encode4(g(i), g(i1), g(j), g(j1))
 }
 
 /// Fold the sequence and return the list of minimum-free-energy structures.
@@ -203,6 +211,41 @@ pub fn w(
     wmin
 }
 
+/// Like [`v`], but returns only the energy, avoiding a `Struct` clone on the
+/// common memoization-hit path (the result's `desc`/`ij` are not needed here).
+#[inline]
+fn v_energy(
+    s: &[u8],
+    i: usize,
+    j: usize,
+    temp: f64,
+    v_cache: &mut Cache,
+    w_cache: &mut Cache,
+    emap: &Energies,
+) -> f64 {
+    if !v_cache[i][j].is_default() {
+        return v_cache[i][j].e;
+    }
+    v(s, i, j, temp, v_cache, w_cache, emap).e
+}
+
+/// Like [`w`], but returns only the energy (no `Struct` clone on a cache hit).
+#[inline]
+fn w_energy(
+    s: &[u8],
+    i: usize,
+    j: usize,
+    temp: f64,
+    v_cache: &mut Cache,
+    w_cache: &mut Cache,
+    emap: &Energies,
+) -> f64 {
+    if !w_cache[i][j].is_default() {
+        return w_cache[i][j].e;
+    }
+    w(s, i, j, temp, v_cache, w_cache, emap).e
+}
+
 /// Minimum free energy of the structure between i and j (Fig. 2B).
 pub fn v(
     s: &[u8],
@@ -247,42 +290,73 @@ pub fn v(
     }
 
     // E2 = min{FL(i, j, i', j') + V(i', j')}, i<i'<j'<j
+    //
+    // The energy of each candidate is computed with dense-table lookups; the
+    // `desc` string for the *winner* (if any) is built once, after the search,
+    // rather than for every candidate. `STACK_DE` and the left pair's NN
+    // membership depend only on (i, j), so they are hoisted out of the loops.
     let mut e2 = Struct::new(INF, "", Vec::new());
+    // tag: 0 = stack, 1 = interior loop, 2 = bulge-left, 3 = bulge-right
+    let mut best: Option<(f64, usize, usize, u8)> = None;
     if j >= 4 {
+        let stack_de = (i > 0 && j == n - 1) || (i == 0 && j < n - 1);
+        let pair_inner_left =
+            emap.nn_t[code4(s, i as i64, i as i64 + 1, j as i64, j as i64 - 1)].is_some();
+
         for i1 in (i + 1)..(j - 4) {
             for j1 in (i1 + 4)..j {
                 if comp(emap, s[i1]) != s[j1] {
                     continue;
                 }
 
-                let pair = pair_str(s, i as i64, i1 as i64, j as i64, j1 as i64);
-                let pair_left = pair_str(s, i as i64, i as i64 + 1, j as i64, j as i64 - 1);
-                let pair_right =
-                    pair_str(s, i1 as i64 - 1, i1 as i64, j1 as i64 + 1, j1 as i64);
-                let pair_inner =
-                    emap.nn.contains_key(&pair_left) || emap.nn.contains_key(&pair_right);
-
                 let stack = i1 == i + 1 && j1 == j - 1;
                 let bulge_left = i1 > i + 1;
                 let bulge_right = j1 < j - 1;
 
-                // Every non-`continue` branch below assigns both; the `else`
-                // arm diverges, so these stay definitely-assigned without a
-                // dead initial value.
                 let mut e2_test: f64;
-                let e2_test_type: String;
+                let tag: u8;
                 if stack {
                     e2_test = stack_e(s, i as i64, i1 as i64, j as i64, j1 as i64, temp, emap);
-                    e2_test_type = if (i > 0 && j == n - 1) || (i == 0 && j < n - 1) {
-                        // there's a dangling end
+                    tag = 0;
+                } else if bulge_left && bulge_right && {
+                    let pair_inner = pair_inner_left
+                        || emap.nn_t[code4(s, i1 as i64 - 1, i1 as i64, j1 as i64 + 1, j1 as i64)]
+                            .is_some();
+                    !pair_inner
+                } {
+                    e2_test =
+                        internal_loop(s, i as i64, i1 as i64, j as i64, j1 as i64, temp, emap);
+                    tag = 1;
+                } else if bulge_left && !bulge_right {
+                    e2_test = bulge(s, i as i64, i1 as i64, j as i64, j1 as i64, temp, emap);
+                    tag = 2;
+                } else if !bulge_left && bulge_right {
+                    e2_test = bulge(s, i as i64, i1 as i64, j as i64, j1 as i64, temp, emap);
+                    tag = 3;
+                } else {
+                    continue;
+                }
+
+                e2_test += v_energy(s, i1, j1, temp, v_cache, w_cache, emap);
+                let cur = best.map_or(INF, |b| b.0);
+                if e2_test != NEG_INF && e2_test < cur {
+                    best = Some((e2_test, i1, j1, tag));
+                }
+            }
+        }
+
+        if let Some((e2_test, i1, j1, tag)) = best {
+            let desc = match tag {
+                0 => {
+                    let pair = pair_str(s, i as i64, i1 as i64, j as i64, j1 as i64);
+                    if stack_de {
                         format!("STACK_DE:{}", pair)
                     } else {
                         format!("STACK:{}", pair)
-                    };
-                } else if bulge_left && bulge_right && !pair_inner {
-                    e2_test =
-                        internal_loop(s, i as i64, i1 as i64, j as i64, j1 as i64, temp, emap);
-                    e2_test_type = if i1 - i == 2 && j - j1 == 2 {
+                    }
+                }
+                1 => {
+                    if i1 - i == 2 && j - j1 == 2 {
                         // technically an interior loop of 1; really a 1bp mismatch
                         let loop_left = std::str::from_utf8(&s[i..=i1]).unwrap();
                         let mut loop_right_rev: Vec<u8> = s[j1..=j].to_vec();
@@ -291,22 +365,12 @@ pub fn v(
                         format!("STACK:{}/{}", loop_left, loop_right_rev)
                     } else {
                         format!("INTERIOR_LOOP:{}/{}", i1 - i, j - j1)
-                    };
-                } else if bulge_left && !bulge_right {
-                    e2_test = bulge(s, i as i64, i1 as i64, j as i64, j1 as i64, temp, emap);
-                    e2_test_type = format!("BULGE:{}", i1 - i);
-                } else if !bulge_left && bulge_right {
-                    e2_test = bulge(s, i as i64, i1 as i64, j as i64, j1 as i64, temp, emap);
-                    e2_test_type = format!("BULGE:{}", j - j1);
-                } else {
-                    continue;
+                    }
                 }
-
-                e2_test += v(s, i1, j1, temp, v_cache, w_cache, emap).e;
-                if e2_test != NEG_INF && e2_test < e2.e {
-                    e2 = Struct::new(e2_test, &e2_test_type, vec![(i1 as i64, j1 as i64)]);
-                }
-            }
+                2 => format!("BULGE:{}", i1 - i),
+                _ => format!("BULGE:{}", j - j1),
+            };
+            e2 = Struct::new(e2_test, &desc, vec![(i1 as i64, j1 as i64)]);
         }
     }
 
@@ -356,41 +420,36 @@ fn j_s(query_len: i64, known_len: i64, d_g_x: f64, temp: f64) -> f64 {
 /// Free energy of a stack / dangling end / terminal mismatch.
 fn stack_e(s: &[u8], i: i64, i1: i64, j: i64, j1: i64, temp: f64, emap: &Energies) -> f64 {
     let n = s.len() as i64;
-    if [i, i1, j, j1].iter().any(|&x| x >= n) {
+    if i >= n || i1 >= n || j >= n || j1 >= n {
         return 0.0;
     }
 
-    let p = pair_str(s, i, i1, j, j1);
-    if [i, i1, j, j1].iter().any(|&x| x == -1) {
+    let p = code4(s, i, i1, j, j1);
+    if i == -1 || i1 == -1 || j == -1 || j1 == -1 {
         // it's a dangling end
-        let (d_h, d_s) = emap.de[&p];
+        let (d_h, d_s) = emap.de_t[p].expect("de");
         return d_g(d_h, d_s, temp);
     }
 
     if i > 0 && j < n - 1 {
         // it's internal
-        let (d_h, d_s) = emap.nn.get(&p).copied().unwrap_or_else(|| emap.internal_mm[&p]);
+        let (d_h, d_s) = emap.nn_t[p].or_else(|| emap.internal_mm_t[p]).expect("nn/imm");
         return d_g(d_h, d_s, temp);
     }
 
     if i == 0 && j == n - 1 {
         // it's terminal
-        let (d_h, d_s) = emap.nn.get(&p).copied().unwrap_or_else(|| emap.terminal_mm[&p]);
+        let (d_h, d_s) = emap.nn_t[p].or_else(|| emap.terminal_mm_t[p]).expect("nn/tmm");
         return d_g(d_h, d_s, temp);
     }
 
     if i > 0 && j == n - 1 {
         // it's dangling on the left
-        let (d_h, d_s) = emap.nn.get(&p).copied().unwrap_or_else(|| emap.terminal_mm[&p]);
+        let (d_h, d_s) = emap.nn_t[p].or_else(|| emap.terminal_mm_t[p]).expect("nn/tmm");
         let mut dgv = d_g(d_h, d_s, temp);
 
-        let pair_de = format!(
-            "{}{}/.{}",
-            s[(i - 1) as usize] as char,
-            s[i as usize] as char,
-            s[j as usize] as char
-        );
-        if let Some(&(d_h2, d_s2)) = emap.de.get(&pair_de) {
+        let pd = energies::encode4(s[(i - 1) as usize], s[i as usize], b'.', s[j as usize]);
+        if let Some((d_h2, d_s2)) = emap.de_t[pd] {
             dgv += d_g(d_h2, d_s2, temp);
         }
         return dgv;
@@ -398,16 +457,11 @@ fn stack_e(s: &[u8], i: i64, i1: i64, j: i64, j1: i64, temp: f64, emap: &Energie
 
     if i == 0 && j < n - 1 {
         // it's dangling on the right
-        let (d_h, d_s) = emap.nn.get(&p).copied().unwrap_or_else(|| emap.terminal_mm[&p]);
+        let (d_h, d_s) = emap.nn_t[p].or_else(|| emap.terminal_mm_t[p]).expect("nn/tmm");
         let mut dgv = d_g(d_h, d_s, temp);
 
-        let pair_de = format!(
-            ".{}/{}{}",
-            s[i as usize] as char,
-            s[(j + 1) as usize] as char,
-            s[j as usize] as char
-        );
-        if let Some(&(d_h2, d_s2)) = emap.de.get(&pair_de) {
+        let pd = energies::encode4(b'.', s[i as usize], s[(j + 1) as usize], s[j as usize]);
+        if let Some((d_h2, d_s2)) = emap.de_t[pd] {
             dgv += d_g(d_h2, d_s2, temp);
         }
         return dgv;
@@ -424,7 +478,7 @@ fn hairpin(s: &[u8], i: usize, j: usize, temp: f64, emap: &Energies) -> f64 {
 
     let hp = &s[i..=j];
     let hairpin_len = (hp.len() - 2) as i64;
-    let p = pair_str(s, i as i64, i as i64 + 1, j as i64, j as i64 - 1);
+    let p = code4(s, i as i64, i as i64 + 1, j as i64, j as i64 - 1);
 
     if comp(emap, hp[0]) != hp[hp.len() - 1] {
         panic!("hairpin: no closing pair");
@@ -449,7 +503,7 @@ fn hairpin(s: &[u8], i: usize, j: usize, temp: f64, emap: &Energies) -> f64 {
 
     // terminal mismatch
     if hairpin_len > 3 {
-        if let Some(&(d_h, d_s)) = emap.terminal_mm.get(&p) {
+        if let Some((d_h, d_s)) = emap.terminal_mm_t[p] {
             d_gv += d_g(d_h, d_s, temp);
         }
     }
@@ -478,8 +532,7 @@ fn bulge(s: &[u8], i: i64, i1: i64, j: i64, j1: i64, temp: f64, emap: &Energies)
     };
 
     if loop_len == 1 {
-        let p = pair_str(s, i, i1, j, j1);
-        assert!(emap.nn.contains_key(&p));
+        debug_assert!(emap.nn_t[code4(s, i, i1, j, j1)].is_some());
         d_gv += stack_e(s, i, i1, j, j1, temp, emap);
     }
 
@@ -517,12 +570,10 @@ fn internal_loop(s: &[u8], i: i64, i1: i64, j: i64, j1: i64, temp: f64, emap: &E
     let loop_asymmetry = (loop_left - loop_right).abs();
     d_gv += 0.3 * loop_asymmetry as f64;
 
-    let pair_left_mm = pair_str(s, i, i + 1, j, j - 1);
-    let (d_h, d_s) = emap.terminal_mm[&pair_left_mm];
+    let (d_h, d_s) = emap.terminal_mm_t[code4(s, i, i + 1, j, j - 1)].expect("tmm");
     d_gv += d_g(d_h, d_s, temp);
 
-    let pair_right_mm = pair_str(s, i1 - 1, i1, j1 + 1, j1);
-    let (d_h, d_s) = emap.terminal_mm[&pair_right_mm];
+    let (d_h, d_s) = emap.terminal_mm_t[code4(s, i1 - 1, i1, j1 + 1, j1)].expect("tmm");
     d_gv += d_g(d_h, d_s, temp);
 
     d_gv
@@ -652,7 +703,7 @@ fn multi_branch(
         assert!(unpaired_right >= 0);
 
         if (i2, j2) != (ii, jj) {
-            e_sum += w(s, i2 as usize, j2 as usize, temp, v_cache, w_cache, emap).e;
+            e_sum += w_energy(s, i2 as usize, j2 as usize, temp, v_cache, w_cache, emap);
         }
     }
 
