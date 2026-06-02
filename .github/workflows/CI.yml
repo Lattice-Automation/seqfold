@@ -22,20 +22,15 @@ jobs:
   linux:
     runs-on: ${{ matrix.platform.runner }}
     strategy:
+      fail-fast: false
       matrix:
+        # Mainstream glibc targets with working test emulation. Other arches
+        # (s390x/ppc64le/32-bit) install from the sdist.
         platform:
           - runner: ubuntu-22.04
             target: x86_64
           - runner: ubuntu-22.04
-            target: x86
-          - runner: ubuntu-22.04
             target: aarch64
-          - runner: ubuntu-22.04
-            target: armv7
-          - runner: ubuntu-22.04
-            target: s390x
-          - runner: ubuntu-22.04
-            target: ppc64le
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -87,16 +82,13 @@ jobs:
   musllinux:
     runs-on: ${{ matrix.platform.runner }}
     strategy:
+      fail-fast: false
       matrix:
         platform:
           - runner: ubuntu-22.04
             target: x86_64
           - runner: ubuntu-22.04
-            target: x86
-          - runner: ubuntu-22.04
             target: aarch64
-          - runner: ubuntu-22.04
-            target: armv7
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -146,6 +138,7 @@ jobs:
   windows:
     runs-on: ${{ matrix.platform.runner }}
     strategy:
+      fail-fast: false
       matrix:
         platform:
           - runner: windows-latest
@@ -188,6 +181,7 @@ jobs:
   macos:
     runs-on: ${{ matrix.platform.runner }}
     strategy:
+      fail-fast: false
       matrix:
         platform:
           - runner: macos-15-intel
