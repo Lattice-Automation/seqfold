@@ -37,6 +37,23 @@ python -m unittest discover tests -p '*_test.py'   # Python public API + CLI
 (seqfold vs UNAFold). `examples/known_structures.fasta` holds real structured
 sequences used by the benchmark.
 
+`scripts/smoke_test.py` checks the public API + CLI of *any* install against
+known-good values — handy for verifying a wheel from CI or a published release,
+not just a local build:
+
+```bash
+python scripts/smoke_test.py        # exits non-zero on any mismatch
+
+# against a wheel from a CI run, in a clean env:
+gh run download <run-id> -n wheels-macos-aarch64 -D /tmp/whl   # pick your platform
+python -m venv /tmp/v && /tmp/v/bin/pip install /tmp/whl/*.whl
+/tmp/v/bin/python scripts/smoke_test.py
+
+# against PyPI after a release:
+python -m venv /tmp/v && /tmp/v/bin/pip install seqfold
+/tmp/v/bin/python scripts/smoke_test.py
+```
+
 ## Benchmark
 
 ```bash
