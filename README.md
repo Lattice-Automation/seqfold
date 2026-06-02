@@ -8,16 +8,34 @@ Predict the minimum free energy structure of nucleic acids.
 
 The folding/Tm engine is written in **Rust** and exposed to Python through [PyO3](https://pyo3.rs)/[maturin](https://www.maturin.rs).
 
+## Performance
+
+`dg()` on random sequences, original pure-Python `seqfold` vs. the Rust engine
+(Apple M-series, CPython 3.9, best of N runs). Outputs are identical; the
+speedup grows with length:
+
+| Sequence length | Python (`0.7.x`) | Rust (`0.8.0`) | Speedup |
+| ---: | ---: | ---: | ---: |
+|  30 nt |  0.006 s | 0.0004 s | ~16× |
+|  60 nt |  0.089 s | 0.005 s  | ~16× |
+| 120 nt |  1.13 s  | 0.057 s  | ~20× |
+| 200 nt |  7.0 s   | 0.32 s   | ~22× |
+| 300 nt | 28.9 s   | 1.15 s   | ~25× |
+
+About 2.6× of that came from an in-Rust pass (dense integer-keyed energy tables
+instead of string-keyed hash lookups, hoisted loop-invariants, fewer
+allocations); the rest is the move off CPython. Reproduce with
+`cargo run --release --example bench`.
+
 ## Installation
 
-### pypy3 (recommended)
+### pip (recommended)
 
 ```bash
-pypy3 -m ensurepip
-pypy3 -m pip install seqfold
+pip install seqfold
 ```
 
-For a 200bp sequence (on my laptop), [pypy3](https://doc.pypy.org/en/latest/index.html) takes 2.5 seconds versus 15 seconds for CPython.
+Prebuilt wheels bundle the compiled Rust extension, so no Rust toolchain is needed. Because the engine is native, the Python interpreter no longer affects folding speed (CPython is fine; see [Performance](#performance)).
 
 ### Conda
 
@@ -26,14 +44,6 @@ conda install -c bioconda seqfold
 ```
 
 Thank you to [@jonas-fuchs](https://github.com/jonas-fuchs) for this.
-
-### pip
-
-```bash
-pip install seqfold
-```
-
-Prebuilt wheels include the compiled Rust extension, so no Rust toolchain is needed to install.
 
 ## Usage
 
