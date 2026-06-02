@@ -11,9 +11,11 @@ on:
     branches:
       - main
       - master
-    tags:
-      - '*'
   pull_request:
+  # Publishing a GitHub Release is the single source of truth for a release:
+  # the version is taken from the release tag and the wheels go to PyPI.
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -37,6 +39,15 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.8"
+      - name: Set version from release tag
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          V="${TAG#v}"   # strip an optional leading "v"
+          sed -i.bak "s/^version = .*/version = \"$V\"/" Cargo.toml && rm -f Cargo.toml.bak
+          echo "building seqfold $V"
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -97,6 +108,15 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.8"
+      - name: Set version from release tag
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          V="${TAG#v}"   # strip an optional leading "v"
+          sed -i.bak "s/^version = .*/version = \"$V\"/" Cargo.toml && rm -f Cargo.toml.bak
+          echo "building seqfold $V"
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -159,6 +179,15 @@ jobs:
         with:
           python-version: "3.13"
           architecture: ${{ matrix.platform.python_arch }}
+      - name: Set version from release tag
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          V="${TAG#v}"   # strip an optional leading "v"
+          sed -i.bak "s/^version = .*/version = \"$V\"/" Cargo.toml && rm -f Cargo.toml.bak
+          echo "building seqfold $V"
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -196,6 +225,15 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.8"
+      - name: Set version from release tag
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          V="${TAG#v}"   # strip an optional leading "v"
+          sed -i.bak "s/^version = .*/version = \"$V\"/" Cargo.toml && rm -f Cargo.toml.bak
+          echo "building seqfold $V"
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -221,6 +259,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Set version from release tag
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          V="${TAG#v}"   # strip an optional leading "v"
+          sed -i.bak "s/^version = .*/version = \"$V\"/" Cargo.toml && rm -f Cargo.toml.bak
+          echo "building seqfold $V"
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
@@ -235,10 +282,14 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}
     needs: [linux, musllinux, windows, macos, sdist]
+    # Dedicated publishing environment. Configure it under repo Settings ->
+    # Environments (and name it as the PyPI trusted publisher's "Environment").
+    # Add required reviewers there to gate who can actually publish to PyPI.
+    environment: pypi
     permissions:
-      # Use to sign the release artifacts
+      # Mint the OIDC token PyPI trusted publishing exchanges (no API token).
       id-token: write
       # Used to upload release artifacts
       contents: write
@@ -251,10 +302,9 @@ jobs:
         with:
           subject-path: 'wheels-*/*'
       - name: Install uv
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        if: ${{ github.event_name == 'release' }}
         uses: astral-sh/setup-uv@v7
+      # No token: uv uses GitHub OIDC trusted publishing (id-token: write above).
       - name: Publish to PyPI
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        run: uv publish 'wheels-*/*'
-        env:
-          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        if: ${{ github.event_name == 'release' }}
+        run: uv publish --trusted-publishing always 'wheels-*/*'
