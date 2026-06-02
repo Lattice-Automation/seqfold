@@ -7,11 +7,17 @@
 
 use std::collections::HashSet;
 
+use rayon::prelude::*;
+
 use super::energies::{self, Energies};
 use super::pyfloat::pyround;
 
 const INF: f64 = f64::INFINITY;
 const NEG_INF: f64 = f64::NEG_INFINITY;
+
+/// Sequences at least this long fill each anti-diagonal in parallel; shorter
+/// ones run sequentially (thread overhead outweighs the work).
+const PARALLEL_THRESHOLD: usize = 64;
 
 /// A single structure with a free energy, description, and inward children.
 #[derive(Clone, Debug)]
@@ -58,10 +64,6 @@ impl Struct {
     /// Python `__bool__`: false when the energy is +/- infinity.
     pub fn truthy(&self) -> bool {
         self.e != INF && self.e != NEG_INF
-    }
-
-    fn is_default(&self) -> bool {
-        self.e == NEG_INF && self.ij.is_empty()
     }
 
     fn with_ij(&self, ij: Vec<(i64, i64)>) -> Struct {
@@ -166,106 +168,109 @@ pub fn cache(seq: &str, temp: f64) -> Result<(Cache, Cache), FoldError> {
     }
     let emap: &Energies = if dna { energies::dna() } else { energies::rna() };
 
+    Ok(fill(s, temp, emap))
+}
+
+/// Fill the V and W caches bottom-up by anti-diagonal (span `d = j - i`).
+///
+/// Every cell on a given anti-diagonal depends only on cells of strictly
+/// smaller span, so each diagonal can be computed in parallel. A cell's value
+/// is a pure function of already-finalized smaller cells, so the result is
+/// independent of evaluation order — identical to the recursive version.
+fn fill(s: &[u8], temp: f64, emap: &Energies) -> (Cache, Cache) {
     let n = s.len();
     let mut v_cache: Cache = vec![vec![Struct::default_(); n]; n];
     let mut w_cache: Cache = vec![vec![Struct::default_(); n]; n];
 
-    w(s, 0, n - 1, temp, &mut v_cache, &mut w_cache, emap);
+    // W over spans < 4 is NULL (the recursive base case).
+    for d in 0..4 {
+        if d >= n {
+            break;
+        }
+        for i in 0..(n - d) {
+            w_cache[i][i + d] = Struct::null();
+        }
+    }
 
-    Ok((v_cache, w_cache))
+    let parallel = n >= PARALLEL_THRESHOLD;
+    for d in 4..n {
+        let row: Vec<(Struct, Struct)> = if parallel {
+            (0..(n - d))
+                .into_par_iter()
+                .map(|i| compute_cell(s, i, i + d, temp, &v_cache, &w_cache, emap))
+                .collect()
+        } else {
+            (0..(n - d))
+                .map(|i| compute_cell(s, i, i + d, temp, &v_cache, &w_cache, emap))
+                .collect()
+        };
+        for (i, (vs, ws)) in row.into_iter().enumerate() {
+            v_cache[i][i + d] = vs;
+            w_cache[i][i + d] = ws;
+        }
+    }
+
+    (v_cache, w_cache)
 }
 
-/// Lowest free energy structure in the Sij subsequence (Fig. 2B).
-pub fn w(
+/// Compute the V and W structs for one cell, reading only finalized cells.
+#[inline]
+fn compute_cell(
     s: &[u8],
     i: usize,
     j: usize,
     temp: f64,
-    v_cache: &mut Cache,
-    w_cache: &mut Cache,
+    v_cache: &Cache,
+    w_cache: &Cache,
+    emap: &Energies,
+) -> (Struct, Struct) {
+    let vs = compute_v(s, i, j, temp, v_cache, w_cache, emap);
+    let ws = compute_w(s, i, j, temp, &vs, w_cache, emap);
+    (vs, ws)
+}
+
+/// Lowest free energy structure in the Sij subsequence (Fig. 2B), given that
+/// all smaller-span cells are already in the caches.
+fn compute_w(
+    s: &[u8],
+    i: usize,
+    j: usize,
+    temp: f64,
+    v_ij: &Struct,
+    w_cache: &Cache,
     emap: &Energies,
 ) -> Struct {
-    if !w_cache[i][j].is_default() {
-        return w_cache[i][j].clone();
-    }
-
-    if j - i < 4 {
-        w_cache[i][j] = Struct::null();
-        return w_cache[i][j].clone();
-    }
-
-    let w1 = w(s, i + 1, j, temp, v_cache, w_cache, emap);
-    let w2 = w(s, i, j - 1, temp, v_cache, w_cache, emap);
-    let w3 = v(s, i, j, temp, v_cache, w_cache, emap);
+    let w1 = w_cache[i + 1][j].clone();
+    let w2 = w_cache[i][j - 1].clone();
+    let w3 = v_ij.clone();
 
     let mut w4 = Struct::null();
     for k in (i + 1)..(j - 1) {
-        let w4_test = multi_branch(s, i, k, j, temp, v_cache, w_cache, emap, false);
+        let w4_test = mb(s, i, k, j, temp, w_cache, emap, false);
         if w4_test.truthy() && w4_test.e < w4.e {
             w4 = w4_test;
         }
     }
 
-    let wmin = min_struct(&[w1, w2, w3, w4]);
-    w_cache[i][j] = wmin.clone();
-    wmin
+    min_struct(&[w1, w2, w3, w4])
 }
 
-/// Like [`v`], but returns only the energy, avoiding a `Struct` clone on the
-/// common memoization-hit path (the result's `desc`/`ij` are not needed here).
-#[inline]
-fn v_energy(
+/// Minimum free energy of the structure between i and j (Fig. 2B), given that
+/// all smaller-span cells are already in the caches.
+fn compute_v(
     s: &[u8],
     i: usize,
     j: usize,
     temp: f64,
-    v_cache: &mut Cache,
-    w_cache: &mut Cache,
-    emap: &Energies,
-) -> f64 {
-    if !v_cache[i][j].is_default() {
-        return v_cache[i][j].e;
-    }
-    v(s, i, j, temp, v_cache, w_cache, emap).e
-}
-
-/// Like [`w`], but returns only the energy (no `Struct` clone on a cache hit).
-#[inline]
-fn w_energy(
-    s: &[u8],
-    i: usize,
-    j: usize,
-    temp: f64,
-    v_cache: &mut Cache,
-    w_cache: &mut Cache,
-    emap: &Energies,
-) -> f64 {
-    if !w_cache[i][j].is_default() {
-        return w_cache[i][j].e;
-    }
-    w(s, i, j, temp, v_cache, w_cache, emap).e
-}
-
-/// Minimum free energy of the structure between i and j (Fig. 2B).
-pub fn v(
-    s: &[u8],
-    i: usize,
-    j: usize,
-    temp: f64,
-    v_cache: &mut Cache,
-    w_cache: &mut Cache,
+    v_cache: &Cache,
+    w_cache: &Cache,
     emap: &Energies,
 ) -> Struct {
-    if !v_cache[i][j].is_default() {
-        return v_cache[i][j].clone();
-    }
-
     let n = s.len();
 
     // the ends must basepair for V(i,j)
     if comp(emap, s[i]) != s[j] {
-        v_cache[i][j] = Struct::null();
-        return v_cache[i][j].clone();
+        return Struct::null();
     }
 
     // if the basepair is isolated, and the seq large, penalize at 1,600 kcal/mol
@@ -276,17 +281,14 @@ pub fn v(
     let isolated_inner = comp(emap, s[i + 1]) != s[j - 1];
 
     if isolated_outer && isolated_inner {
-        v_cache[i][j] = Struct::new(1600.0, "", Vec::new());
-        return v_cache[i][j].clone();
+        return Struct::new(1600.0, "", Vec::new());
     }
 
     // E1 = FH(i, j); hairpin
     let pair = pair_str(s, i as i64, i as i64 + 1, j as i64, j as i64 - 1);
     let e1 = Struct::new(hairpin(s, i, j, temp, emap), &format!("HAIRPIN:{}", pair), Vec::new());
     if j - i == 4 {
-        v_cache[i][j] = e1.clone();
-        w_cache[i][j] = e1.clone();
-        return v_cache[i][j].clone();
+        return e1;
     }
 
     // E2 = min{FL(i, j, i', j') + V(i', j')}, i<i'<j'<j
@@ -337,7 +339,7 @@ pub fn v(
                     continue;
                 }
 
-                e2_test += v_energy(s, i1, j1, temp, v_cache, w_cache, emap);
+                e2_test += v_cache[i1][j1].e;
                 let cur = best.map_or(INF, |b| b.0);
                 if e2_test != NEG_INF && e2_test < cur {
                     best = Some((e2_test, i1, j1, tag));
@@ -378,16 +380,14 @@ pub fn v(
     let mut e3 = Struct::null();
     if !isolated_outer || i == 0 || j == n - 1 {
         for k in (i + 1)..(j - 1) {
-            let e3_test = multi_branch(s, i, k, j, temp, v_cache, w_cache, emap, true);
+            let e3_test = mb(s, i, k, j, temp, w_cache, emap, true);
             if e3_test.truthy() && e3_test.e < e3.e {
                 e3 = e3_test;
             }
         }
     }
 
-    let e = min_struct(&[e1, e2, e3]);
-    v_cache[i][j] = e.clone();
-    e
+    min_struct(&[e1, e2, e3])
 }
 
 /// A stack representation string ("AT/TG"), the key for the NN maps.
@@ -579,16 +579,9 @@ fn internal_loop(s: &[u8], i: i64, i1: i64, j: i64, j1: i64, temp: f64, emap: &E
     d_gv
 }
 
-/// Recursively gather basepairing branches into `branches`.
-fn add_branch(
-    s: &[u8],
-    st: &Struct,
-    branches: &mut Vec<(i64, i64)>,
-    temp: f64,
-    v_cache: &mut Cache,
-    w_cache: &mut Cache,
-    emap: &Energies,
-) {
+/// Recursively gather basepairing branches into `branches` (reads only the
+/// already-finalized W cache).
+fn add_branch(st: &Struct, branches: &mut Vec<(i64, i64)>, w_cache: &Cache) {
     if !st.truthy() || st.ij.is_empty() {
         return;
     }
@@ -598,33 +591,30 @@ fn add_branch(
     }
     let ij = st.ij.clone();
     for (i1, j1) in ij {
-        let sub = w(s, i1 as usize, j1 as usize, temp, v_cache, w_cache, emap);
-        add_branch(s, &sub, branches, temp, v_cache, w_cache, emap);
+        let sub = w_cache[i1 as usize][j1 as usize].clone();
+        add_branch(&sub, branches, w_cache);
     }
 }
 
-/// Multi-branch energy penalty (linear; Jaeger, Turner & Zuker, 1989).
-fn multi_branch(
+/// Multi-branch energy penalty (linear; Jaeger, Turner & Zuker, 1989). Reads
+/// only finalized (smaller-span) cells of the W cache.
+fn mb(
     s: &[u8],
     i: usize,
     k: usize,
     j: usize,
     temp: f64,
-    v_cache: &mut Cache,
-    w_cache: &mut Cache,
+    w_cache: &Cache,
     emap: &Energies,
     helix: bool,
 ) -> Struct {
     let (left, right) = if helix {
         (
-            w(s, i + 1, k, temp, v_cache, w_cache, emap),
-            w(s, k + 1, j - 1, temp, v_cache, w_cache, emap),
+            w_cache[i + 1][k].clone(),
+            w_cache[k + 1][j - 1].clone(),
         )
     } else {
-        (
-            w(s, i, k, temp, v_cache, w_cache, emap),
-            w(s, k + 1, j, temp, v_cache, w_cache, emap),
-        )
+        (w_cache[i][k].clone(), w_cache[k + 1][j].clone())
     };
 
     if !left.truthy() || !right.truthy() {
@@ -632,8 +622,8 @@ fn multi_branch(
     }
 
     let mut branches: Vec<(i64, i64)> = Vec::new();
-    add_branch(s, &left, &mut branches, temp, v_cache, w_cache, emap);
-    add_branch(s, &right, &mut branches, temp, v_cache, w_cache, emap);
+    add_branch(&left, &mut branches, w_cache);
+    add_branch(&right, &mut branches, w_cache);
 
     // this isn't multi-branched
     if branches.len() < 2 {
@@ -703,7 +693,7 @@ fn multi_branch(
         assert!(unpaired_right >= 0);
 
         if (i2, j2) != (ii, jj) {
-            e_sum += w_energy(s, i2 as usize, j2 as usize, temp, v_cache, w_cache, emap);
+            e_sum += w_cache[i2 as usize][j2 as usize].e;
         }
     }
 
@@ -806,13 +796,6 @@ mod tests {
     use super::*;
     use crate::core::energies;
 
-    fn caches(n: usize) -> (Cache, Cache) {
-        (
-            vec![vec![Struct::default_(); n]; n],
-            vec![vec![Struct::default_(); n]; n],
-        )
-    }
-
     #[test]
     fn test_pair() {
         let seq = b"ATGGAATAGTG";
@@ -870,13 +853,13 @@ mod tests {
         ];
         let expected = [-3.8, -6.4, -4.2];
         for (idx, (seq, j, emap)) in cases.iter().enumerate() {
-            let (mut vc, mut wc) = caches(seq.len());
-            let st = w(seq, 0, *j, 310.15, &mut vc, &mut wc, emap);
+            let (_v, wc) = fill(seq, 310.15, emap);
+            let e = wc[0][*j].e;
             assert!(
-                (st.e - expected[idx]).abs() <= 0.2,
+                (e - expected[idx]).abs() <= 0.2,
                 "case {}: got {}",
                 idx,
-                st.e
+                e
             );
         }
     }

@@ -1,6 +1,6 @@
 [package]
 name = "seqfold"
-version = "0.8.0"
+version = "0.10.0"
 edition = "2021"
 description = "Predict the minimum free energy structure of nucleic acids"
 license = "MIT"
@@ -19,6 +19,8 @@ python = ["dep:pyo3"]
 # abi3-py38: build a single stable-ABI wheel that works on CPython 3.8+,
 # instead of a separate wheel per Python minor version.
 pyo3 = { version = "0.22", features = ["extension-module", "abi3-py38"], optional = true }
+# Data-parallel fill of the DP matrix (one task per cell on each anti-diagonal).
+rayon = "1.10"
 
 [profile.release]
 lto = true
