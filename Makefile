@@ -1,31 +1,32 @@
-.PHONY: examples
+.PHONY: examples test install develop build profile parse
 
 PY ?= python3
 
+# Build the Rust extension and install it (editable) into the active env.
+develop:
+	maturin develop --release
+
+# Build a release wheel under target/wheels.
+build:
+	maturin build --release
+
+# Build + install from source (pip uses the maturin backend in pyproject.toml).
 install:
-	rm -f ./seqfold/*.c
 	$(PY) -m pip install .
 
+# Rust unit tests (ported internal tests) + Python public-API tests.
 test:
+	cargo test --lib
 	$(PY) -m unittest discover tests -p '*_test.py'
 
+# Regenerate src/core/data.rs from the original Python energy tables.
+# Requires the original seqfold/dna.py and seqfold/rna.py (see git history).
 parse:
-	$(PY) ./data/_rna.py
-	black ./seqfold/rna.py
-
-patch: test
-	bumpversion patch
-	$(PY) setup.py sdist bdist_wheel
-	$(PY) -m twine upload dist/* --skip-existing
-
-minor: test
-	bumpversion minor
-	$(PY) setup.py sdist bdist_wheel
-	$(PY) -m twine upload dist/* --skip-existing
+	$(PY) ./codegen/gen_data.py
 
 .PHONY: examples
-examples: install
+examples: develop
 	$(PY) ./tests/fold_examples.py
 
-profile: install
+profile: develop
 	$(PY) ./tests/fold_profile.py

@@ -10,6 +10,24 @@ except PackageNotFoundError:
 finally:
     del version, PackageNotFoundError
 
-from .fold import fold, dg, dg_cache, fold, Struct, dot_bracket
-from .tm import tm, tm_cache, gc_cache
-from .types import Cache
+from ._core import (
+    Struct,
+    dg,
+    dg_cache,
+    dot_bracket,
+    fold,
+    gc_cache,
+    tm,
+    tm_cache,
+)
+
+__all__ = [
+    "Struct",
+    "dg",
+    "dg_cache",
+    "dot_bracket",
+    "fold",
+    "gc_cache",
+    "tm",
+    "tm_cache",
+]

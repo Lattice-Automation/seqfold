@@ -1,0 +1,51 @@
+; Real nucleic-acid sequences with known secondary structure, for examples and
+; benchmarking. Unlike random sequences these have genuine hairpins, stems, and
+; multi-branch junctions, so they exercise the folding search realistically.
+;
+; RNA: the canonical yeast tRNA-Phe plus structured RNAs from seqfold's
+; regression set (SPOT-RNA benchmark inputs, each with a published UNAFold
+; reference free energy). DNA: structured oligos from the regression set,
+; including explicit three- and four-branch folds.
+;
+; Header fields: name  len=<nt>  ref_dg=<UNAFold/literature kcal/mol>
+;                seqfold_dg=<this tool, 37C>  -- description
+
+> rna_trna_phe_yeast  len=76  ref_dg=NA  seqfold_dg=-21.9  -- yeast tRNA-Phe (cloverleaf, 4-way junction)
+GCGGAUUUAGCUCAGUUGGGAGAGCGCCAGACUGAAGAUCUGGAGGUCCUGUGUUCGAUCCACAGAAUUCGCACCA
+
+> rna_5s_rrna_ecoli  len=120  ref_dg=-54.9  seqfold_dg=-51.1  -- E. coli 5S rRNA (3-way junction)
+UGCCUGGCGGCCGUAGCGCGGUGGUCCCACCUGACCCCAUGCCGAACUCAGAAGUGAAACGCCGUAGCGCCGAUGGUAGUGUGGGGUCUCCCCAUGCGAGAGUAGGGAACUGCCAGGCAU
+
+> rna_structured_108  len=109  ref_dg=-36.8  seqfold_dg=-32.5  -- structured RNA (SPOT-RNA set)
+GUGAAAGUGUACCUAGGGUUCCAGCCUAUUUGUAGGUGUUCGGACCGAGCGGUACAGGUAUAUUAUAUACCACACCUUAGGGACAAAAGCCCGAGAGGAUGGUUUCACG
+
+> rna_structured_102  len=103  ref_dg=-41.1  seqfold_dg=-32.0  -- structured RNA (SPOT-RNA set)
+GGAAGUGUACCUAGGGAUCCACCUCGAGAGAGGAAGGACCAAGCGGUACAGGCCUACUUCGGUAGGUUACACCGUGGGGAUAAAAGACCCGUGGCAAGUUUCG
+
+> rna_trna_76  len=76  ref_dg=-31.4  seqfold_dg=-33.4  -- tRNA (TPsiC arm, CCA end)
+GGGGGCAUAGCUCAGCUGGGAGAGCGCCUGCUUUGCACGCAGGAGGUCUGCGGUUCGAUCCCGCGCGCUCCCACCA
+
+> rna_trna_like_73  len=74  ref_dg=-32.8  seqfold_dg=-35.7  -- tRNA-like structured RNA
+UGGGAGGUCGUCUAACGGUAGGACGGCGGACUCUGGAUCCGCUGGUGGAGGUUCGAGUCCUCCCCUCCCAGCCA
+
+> rna_multibranch_59  len=60  ref_dg=-18.26  seqfold_dg=-23.8  -- multi-branch structured RNA
+CAGCGCGGCGGGCGGGAGUCCGGCGCGCCCUCCAUCCCCGGCGGCGUCGGCAAGGAGUAG
+
+> rna_structured_51  len=52  ref_dg=-20.7  seqfold_dg=-18.3  -- structured RNA (SPOT-RNA set)
+GGGCGAUGAGGCCCGCCCAAACUGCCCUGAAAAGGGCUGAUGGCCUCUACUG
+
+> rna_stem_loop_31  len=31  ref_dg=-9.5  seqfold_dg=-9.5  -- stem-loop RNA
+ACCCCCUCCUUCCUUGGAUCAAGGGGCUCAA
+
+> dna_four_branch  len=73  ref_dg=-23.4  seqfold_dg=-21.8  -- four-branch DNA fold
+GGGAGGTCGCTCCAGCTGGGAGGAGCGTTGGGGGTATATACCCCCAACACCGGTACTGATCCGGTGACCTCCC
+
+> dna_structured_98  len=99  ref_dg=-9.4  seqfold_dg=-8.3  -- structured DNA oligo
+TGTCAGAAGTTTCCAAATGGCCAGCAATCAACCCATTCCATTGGGGATACAATGGTACAGTTTCGCATATTGTCGGTGAAAATGGTTCCATTAAACTCC
+
+> dna_trna_derived  len=76  ref_dg=-15.5  seqfold_dg=-16.8  -- tRNA-derived DNA fold
+GGGGGCATAGCTCAGCTGGGAGAGCGCCTGCTTTGCACGCAGGAGGTCTGCGGTTCGATCCCGCGCGCTCCCACCA
+
+> dna_three_branch  len=49  ref_dg=-10.9  seqfold_dg=-13.4  -- three-branch DNA fold
+GGGAGGTCGTTACATCTGGGTAACACCGGTACTGATCCGGTGACCTCCC
+

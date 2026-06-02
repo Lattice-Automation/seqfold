@@ -135,6 +135,10 @@ dmypy.json
 seqfold/*.c
 seqfold/*.html
 
+# Rust / maturin build artifacts
+/target
+.venv/
+
 # development/test files
 /data/dna
 *.stats

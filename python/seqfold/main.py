@@ -5,7 +5,7 @@ import sys
 from typing import List
 
 from . import __version__
-from .fold import fold, dot_bracket, Struct
+from ._core import fold, dot_bracket, Struct
 
 
 def run():

@@ -1,0 +1,40 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "seqfold"
+# Single-sourced from Cargo.toml's `version` (maturin reads it via `dynamic`).
+dynamic = ["version"]
+description = "Predict the minimum free energy structure of nucleic acids"
+readme = "README.md"
+license = { text = "mit" }
+authors = [{ name = "JJTimmons", email = "jtimmons@latticeautomation.com" }]
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Environment :: Console",
+]
+
+[project.urls]
+Homepage = "https://github.com/Lattice-Automation/seqfold"
+
+[project.scripts]
+seqfold = "seqfold.main:run"
+
+[project.optional-dependencies]
+dev = ["maturin", "black", "pylint"]
+
+[tool.maturin]
+python-source = "python"
+module-name = "seqfold._core"
+features = ["python"]
+
+[tool.pytest.ini_options]
+# The suite is written as unittest TestCases; scope collection to tests/ so the
+# CI's bare `pytest` invocation is deterministic.
+testpaths = ["tests"]
+python_files = ["*_test.py"]

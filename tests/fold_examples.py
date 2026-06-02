@@ -1,6 +1,6 @@
 from os import path
 
-from seqfold.fold import dg, fold
+from seqfold import dg, fold
 
 import seqfold
 

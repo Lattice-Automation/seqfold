@@ -1,0 +1,33 @@
+[package]
+name = "seqfold"
+# Dev default only. Releases take the version from the GitHub Release tag, which
+# the CI injects here before building (see DEVELOPMENT.md). pyproject.toml reads
+# this via `dynamic = ["version"]`.
+version = "0.10.0"
+edition = "2021"
+description = "Predict the minimum free energy structure of nucleic acids"
+license = "MIT"
+repository = "https://github.com/Lattice-Automation/seqfold"
+
+[lib]
+name = "seqfold"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# Enables the PyO3 extension module. Off by default so `cargo test` exercises
+# the pure-Rust engine without linking libpython.
+python = ["dep:pyo3"]
+
+[dependencies]
+# abi3-py38: build a single stable-ABI wheel that works on CPython 3.8+,
+# instead of a separate wheel per Python minor version.
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py38"], optional = true }
+# Data-parallel fill of the DP matrix (one task per cell on each anti-diagonal).
+rayon = "1.10"
+# Inline storage for the small per-cell basepair lists (no heap alloc for the
+# common 0-1 element case).
+smallvec = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1
