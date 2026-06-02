@@ -1,0 +1,23 @@
+[package]
+name = "seqfold"
+version = "0.7.18"
+edition = "2021"
+description = "Predict the minimum free energy structure of nucleic acids"
+license = "MIT"
+repository = "https://github.com/Lattice-Automation/seqfold"
+
+[lib]
+name = "seqfold"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# Enables the PyO3 extension module. Off by default so `cargo test` exercises
+# the pure-Rust engine without linking libpython.
+python = ["dep:pyo3"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"], optional = true }
+
+[profile.release]
+lto = true
+codegen-units = 1

@@ -1,0 +1,832 @@
+//! Nucleic-acid secondary-structure prediction (Zuker & Stiegler, 1981).
+//!
+//! A faithful port of the original `seqfold/fold.py`. Indices are kept as
+//! `i64` because several helpers are intentionally called with `-1` (a dangling
+//! end) or with indices one past the sequence end; sequence access converts to
+//! `usize` only where the index is known to be valid.
+
+use std::collections::HashSet;
+
+use super::energies::{self, Energies};
+use super::pyfloat::pyround;
+
+const INF: f64 = f64::INFINITY;
+const NEG_INF: f64 = f64::NEG_INFINITY;
+
+/// A single structure with a free energy, description, and inward children.
+#[derive(Clone, Debug)]
+pub struct Struct {
+    pub e: f64,
+    pub desc: String,
+    pub ij: Vec<(i64, i64)>,
+}
+
+/// Python's `Struct.__eq__` compares only `e` and `ij` (not `desc`).
+impl PartialEq for Struct {
+    fn eq(&self, other: &Self) -> bool {
+        self.e == other.e && self.ij == other.ij
+    }
+}
+
+impl Struct {
+    pub fn new(e: f64, desc: &str, ij: Vec<(i64, i64)>) -> Struct {
+        Struct {
+            e,
+            desc: desc.to_string(),
+            ij,
+        }
+    }
+
+    /// The `STRUCT_DEFAULT` sentinel: `Struct(-inf)` with an empty `ij`.
+    pub fn default_() -> Struct {
+        Struct {
+            e: NEG_INF,
+            desc: String::new(),
+            ij: Vec::new(),
+        }
+    }
+
+    /// The `STRUCT_NULL` sentinel: `Struct(inf)` with an empty `ij`.
+    pub fn null() -> Struct {
+        Struct {
+            e: INF,
+            desc: String::new(),
+            ij: Vec::new(),
+        }
+    }
+
+    /// Python `__bool__`: false when the energy is +/- infinity.
+    pub fn truthy(&self) -> bool {
+        self.e != INF && self.e != NEG_INF
+    }
+
+    fn is_default(&self) -> bool {
+        self.e == NEG_INF && self.ij.is_empty()
+    }
+
+    fn with_ij(&self, ij: Vec<(i64, i64)>) -> Struct {
+        Struct {
+            e: self.e,
+            desc: self.desc.clone(),
+            ij,
+        }
+    }
+}
+
+/// Error raised for invalid sequences (maps to Python `RuntimeError`).
+#[derive(Debug)]
+pub struct FoldError(pub String);
+
+type Cache = Vec<Vec<Struct>>;
+
+/// The character at `i`, or `.` for a negative (dangling) index.
+fn ch(s: &[u8], i: i64) -> char {
+    if i < 0 {
+        '.'
+    } else {
+        s[i as usize] as char
+    }
+}
+
+fn comp(emap: &Energies, b: u8) -> u8 {
+    emap.complement[&b]
+}
+
+/// Fold the sequence and return the list of minimum-free-energy structures.
+pub fn fold(seq: &str, temp: f64) -> Result<Vec<Struct>, FoldError> {
+    let (v_cache, w_cache) = cache(seq, temp)?;
+    let n = seq.len();
+    Ok(traceback(0, n - 1, &v_cache, &w_cache))
+}
+
+/// Fold and return just the rounded delta-G of the structure.
+pub fn dg(seq: &str, temp: f64) -> Result<f64, FoldError> {
+    let structs = fold(seq, temp)?;
+    let dg_sum: f64 = structs.iter().map(|s| s.e).sum();
+    Ok(pyround(dg_sum, 2))
+}
+
+/// Fold and return the (i, j) -> min-free-energy matrix (the W cache energies).
+pub fn dg_cache(seq: &str, temp: f64) -> Result<Vec<Vec<f64>>, FoldError> {
+    let (_v, w_cache) = cache(seq, temp)?;
+    Ok(w_cache
+        .iter()
+        .map(|row| row.iter().map(|s| s.e).collect())
+        .collect())
+}
+
+/// Dot-bracket notation for a folded structure.
+pub fn dot_bracket(seq: &str, structs: &[Struct]) -> String {
+    let mut result = vec![b'.'; seq.len()];
+    for s in structs {
+        if s.ij.len() == 1 {
+            let (i, j) = s.ij[0];
+            result[i as usize] = b'(';
+            result[j as usize] = b')';
+        }
+    }
+    String::from_utf8(result).expect("ascii")
+}
+
+/// Build the V and W caches for a sequence.
+pub fn cache(seq: &str, temp: f64) -> Result<(Cache, Cache), FoldError> {
+    let seq = seq.to_uppercase();
+    let temp = temp + 273.15; // kelvin
+    let s = seq.as_bytes();
+
+    // figure out whether it's DNA or RNA, choose energy map
+    let bps: HashSet<u8> = s.iter().copied().collect();
+    if bps.contains(&b'U') && bps.contains(&b'T') {
+        return Err(FoldError(
+            "Both T and U in sequence. Provide one or the other for DNA OR RNA.".to_string(),
+        ));
+    }
+
+    let mut dna = true;
+    if bps.iter().all(|b| b"AUCG".contains(b)) {
+        dna = false;
+    } else if bps.iter().any(|b| !b"ATGC".contains(b)) {
+        let diff: Vec<char> = bps
+            .iter()
+            .filter(|b| !b"ATUGC".contains(b))
+            .map(|&b| b as char)
+            .collect();
+        return Err(FoldError(format!(
+            "Unknown bp: {:?}. Only DNA/RNA foldable",
+            diff
+        )));
+    }
+    let emap: &Energies = if dna { energies::dna() } else { energies::rna() };
+
+    let n = s.len();
+    let mut v_cache: Cache = vec![vec![Struct::default_(); n]; n];
+    let mut w_cache: Cache = vec![vec![Struct::default_(); n]; n];
+
+    w(s, 0, n - 1, temp, &mut v_cache, &mut w_cache, emap);
+
+    Ok((v_cache, w_cache))
+}
+
+/// Lowest free energy structure in the Sij subsequence (Fig. 2B).
+pub fn w(
+    s: &[u8],
+    i: usize,
+    j: usize,
+    temp: f64,
+    v_cache: &mut Cache,
+    w_cache: &mut Cache,
+    emap: &Energies,
+) -> Struct {
+    if !w_cache[i][j].is_default() {
+        return w_cache[i][j].clone();
+    }
+
+    if j - i < 4 {
+        w_cache[i][j] = Struct::null();
+        return w_cache[i][j].clone();
+    }
+
+    let w1 = w(s, i + 1, j, temp, v_cache, w_cache, emap);
+    let w2 = w(s, i, j - 1, temp, v_cache, w_cache, emap);
+    let w3 = v(s, i, j, temp, v_cache, w_cache, emap);
+
+    let mut w4 = Struct::null();
+    for k in (i + 1)..(j - 1) {
+        let w4_test = multi_branch(s, i, k, j, temp, v_cache, w_cache, emap, false);
+        if w4_test.truthy() && w4_test.e < w4.e {
+            w4 = w4_test;
+        }
+    }
+
+    let wmin = min_struct(&[w1, w2, w3, w4]);
+    w_cache[i][j] = wmin.clone();
+    wmin
+}
+
+/// Minimum free energy of the structure between i and j (Fig. 2B).
+pub fn v(
+    s: &[u8],
+    i: usize,
+    j: usize,
+    temp: f64,
+    v_cache: &mut Cache,
+    w_cache: &mut Cache,
+    emap: &Energies,
+) -> Struct {
+    if !v_cache[i][j].is_default() {
+        return v_cache[i][j].clone();
+    }
+
+    let n = s.len();
+
+    // the ends must basepair for V(i,j)
+    if comp(emap, s[i]) != s[j] {
+        v_cache[i][j] = Struct::null();
+        return v_cache[i][j].clone();
+    }
+
+    // if the basepair is isolated, and the seq large, penalize at 1,600 kcal/mol
+    let mut isolated_outer = true;
+    if i != 0 && j < n - 1 {
+        isolated_outer = comp(emap, s[i - 1]) != s[j + 1];
+    }
+    let isolated_inner = comp(emap, s[i + 1]) != s[j - 1];
+
+    if isolated_outer && isolated_inner {
+        v_cache[i][j] = Struct::new(1600.0, "", Vec::new());
+        return v_cache[i][j].clone();
+    }
+
+    // E1 = FH(i, j); hairpin
+    let pair = pair_str(s, i as i64, i as i64 + 1, j as i64, j as i64 - 1);
+    let e1 = Struct::new(hairpin(s, i, j, temp, emap), &format!("HAIRPIN:{}", pair), Vec::new());
+    if j - i == 4 {
+        v_cache[i][j] = e1.clone();
+        w_cache[i][j] = e1.clone();
+        return v_cache[i][j].clone();
+    }
+
+    // E2 = min{FL(i, j, i', j') + V(i', j')}, i<i'<j'<j
+    let mut e2 = Struct::new(INF, "", Vec::new());
+    if j >= 4 {
+        for i1 in (i + 1)..(j - 4) {
+            for j1 in (i1 + 4)..j {
+                if comp(emap, s[i1]) != s[j1] {
+                    continue;
+                }
+
+                let pair = pair_str(s, i as i64, i1 as i64, j as i64, j1 as i64);
+                let pair_left = pair_str(s, i as i64, i as i64 + 1, j as i64, j as i64 - 1);
+                let pair_right =
+                    pair_str(s, i1 as i64 - 1, i1 as i64, j1 as i64 + 1, j1 as i64);
+                let pair_inner =
+                    emap.nn.contains_key(&pair_left) || emap.nn.contains_key(&pair_right);
+
+                let stack = i1 == i + 1 && j1 == j - 1;
+                let bulge_left = i1 > i + 1;
+                let bulge_right = j1 < j - 1;
+
+                // Every non-`continue` branch below assigns both; the `else`
+                // arm diverges, so these stay definitely-assigned without a
+                // dead initial value.
+                let mut e2_test: f64;
+                let e2_test_type: String;
+                if stack {
+                    e2_test = stack_e(s, i as i64, i1 as i64, j as i64, j1 as i64, temp, emap);
+                    e2_test_type = if (i > 0 && j == n - 1) || (i == 0 && j < n - 1) {
+                        // there's a dangling end
+                        format!("STACK_DE:{}", pair)
+                    } else {
+                        format!("STACK:{}", pair)
+                    };
+                } else if bulge_left && bulge_right && !pair_inner {
+                    e2_test =
+                        internal_loop(s, i as i64, i1 as i64, j as i64, j1 as i64, temp, emap);
+                    e2_test_type = if i1 - i == 2 && j - j1 == 2 {
+                        // technically an interior loop of 1; really a 1bp mismatch
+                        let loop_left = std::str::from_utf8(&s[i..=i1]).unwrap();
+                        let mut loop_right_rev: Vec<u8> = s[j1..=j].to_vec();
+                        loop_right_rev.reverse();
+                        let loop_right_rev = String::from_utf8(loop_right_rev).unwrap();
+                        format!("STACK:{}/{}", loop_left, loop_right_rev)
+                    } else {
+                        format!("INTERIOR_LOOP:{}/{}", i1 - i, j - j1)
+                    };
+                } else if bulge_left && !bulge_right {
+                    e2_test = bulge(s, i as i64, i1 as i64, j as i64, j1 as i64, temp, emap);
+                    e2_test_type = format!("BULGE:{}", i1 - i);
+                } else if !bulge_left && bulge_right {
+                    e2_test = bulge(s, i as i64, i1 as i64, j as i64, j1 as i64, temp, emap);
+                    e2_test_type = format!("BULGE:{}", j - j1);
+                } else {
+                    continue;
+                }
+
+                e2_test += v(s, i1, j1, temp, v_cache, w_cache, emap).e;
+                if e2_test != NEG_INF && e2_test < e2.e {
+                    e2 = Struct::new(e2_test, &e2_test_type, vec![(i1 as i64, j1 as i64)]);
+                }
+            }
+        }
+    }
+
+    // E3 = min{W(i+1,i') + W(i'+1,j-1)}, i+1<i'<j-2
+    let mut e3 = Struct::null();
+    if !isolated_outer || i == 0 || j == n - 1 {
+        for k in (i + 1)..(j - 1) {
+            let e3_test = multi_branch(s, i, k, j, temp, v_cache, w_cache, emap, true);
+            if e3_test.truthy() && e3_test.e < e3.e {
+                e3 = e3_test;
+            }
+        }
+    }
+
+    let e = min_struct(&[e1, e2, e3]);
+    v_cache[i][j] = e.clone();
+    e
+}
+
+/// A stack representation string ("AT/TG"), the key for the NN maps.
+fn pair_str(s: &[u8], i: i64, i1: i64, j: i64, j1: i64) -> String {
+    format!("{}{}/{}{}", ch(s, i), ch(s, i1), ch(s, j), ch(s, j1))
+}
+
+/// The struct with the lowest free energy that isn't -inf (undefined).
+fn min_struct(structs: &[Struct]) -> Struct {
+    let mut s = Struct::null();
+    for st in structs {
+        if st.e != NEG_INF && st.e < s.e {
+            s = st.clone();
+        }
+    }
+    s
+}
+
+/// Free energy from delta-h, delta-s, temp.
+fn d_g(d_h: f64, d_s: f64, temp: f64) -> f64 {
+    d_h - temp * (d_s / 1000.0)
+}
+
+/// Jacobson-Stockmayer length extrapolation.
+fn j_s(query_len: i64, known_len: i64, d_g_x: f64, temp: f64) -> f64 {
+    let gas_constant = 1.9872e-3;
+    d_g_x + 2.44 * gas_constant * temp * (query_len as f64 / known_len as f64).ln()
+}
+
+/// Free energy of a stack / dangling end / terminal mismatch.
+fn stack_e(s: &[u8], i: i64, i1: i64, j: i64, j1: i64, temp: f64, emap: &Energies) -> f64 {
+    let n = s.len() as i64;
+    if [i, i1, j, j1].iter().any(|&x| x >= n) {
+        return 0.0;
+    }
+
+    let p = pair_str(s, i, i1, j, j1);
+    if [i, i1, j, j1].iter().any(|&x| x == -1) {
+        // it's a dangling end
+        let (d_h, d_s) = emap.de[&p];
+        return d_g(d_h, d_s, temp);
+    }
+
+    if i > 0 && j < n - 1 {
+        // it's internal
+        let (d_h, d_s) = emap.nn.get(&p).copied().unwrap_or_else(|| emap.internal_mm[&p]);
+        return d_g(d_h, d_s, temp);
+    }
+
+    if i == 0 && j == n - 1 {
+        // it's terminal
+        let (d_h, d_s) = emap.nn.get(&p).copied().unwrap_or_else(|| emap.terminal_mm[&p]);
+        return d_g(d_h, d_s, temp);
+    }
+
+    if i > 0 && j == n - 1 {
+        // it's dangling on the left
+        let (d_h, d_s) = emap.nn.get(&p).copied().unwrap_or_else(|| emap.terminal_mm[&p]);
+        let mut dgv = d_g(d_h, d_s, temp);
+
+        let pair_de = format!(
+            "{}{}/.{}",
+            s[(i - 1) as usize] as char,
+            s[i as usize] as char,
+            s[j as usize] as char
+        );
+        if let Some(&(d_h2, d_s2)) = emap.de.get(&pair_de) {
+            dgv += d_g(d_h2, d_s2, temp);
+        }
+        return dgv;
+    }
+
+    if i == 0 && j < n - 1 {
+        // it's dangling on the right
+        let (d_h, d_s) = emap.nn.get(&p).copied().unwrap_or_else(|| emap.terminal_mm[&p]);
+        let mut dgv = d_g(d_h, d_s, temp);
+
+        let pair_de = format!(
+            ".{}/{}{}",
+            s[i as usize] as char,
+            s[(j + 1) as usize] as char,
+            s[j as usize] as char
+        );
+        if let Some(&(d_h2, d_s2)) = emap.de.get(&pair_de) {
+            dgv += d_g(d_h2, d_s2, temp);
+        }
+        return dgv;
+    }
+
+    0.0
+}
+
+/// Free energy of a hairpin closed at (i, j).
+fn hairpin(s: &[u8], i: usize, j: usize, temp: f64, emap: &Energies) -> f64 {
+    if j - i < 4 {
+        return INF;
+    }
+
+    let hp = &s[i..=j];
+    let hairpin_len = (hp.len() - 2) as i64;
+    let p = pair_str(s, i as i64, i as i64 + 1, j as i64, j as i64 - 1);
+
+    if comp(emap, hp[0]) != hp[hp.len() - 1] {
+        panic!("hairpin: no closing pair");
+    }
+
+    let mut d_gv = 0.0;
+    if let Some(tt) = &emap.tri_tetra_loops {
+        let key = std::str::from_utf8(hp).unwrap();
+        if let Some(&(d_h, d_s)) = tt.get(key) {
+            d_gv = d_g(d_h, d_s, temp);
+        }
+    }
+
+    // size penalty
+    if let Some(&(d_h, d_s)) = emap.hairpin_loops.get(&hairpin_len) {
+        d_gv += d_g(d_h, d_s, temp);
+    } else {
+        let (d_h, d_s) = emap.hairpin_loops[&30];
+        let d_g_inc = d_g(d_h, d_s, temp);
+        d_gv += j_s(hairpin_len, 30, d_g_inc, temp);
+    }
+
+    // terminal mismatch
+    if hairpin_len > 3 {
+        if let Some(&(d_h, d_s)) = emap.terminal_mm.get(&p) {
+            d_gv += d_g(d_h, d_s, temp);
+        }
+    }
+
+    // length-3 AT closing penalty
+    if hairpin_len == 3 && (hp[0] == b'A' || hp[hp.len() - 1] == b'A') {
+        d_gv += 0.5;
+    }
+
+    d_gv
+}
+
+/// Free energy of a bulge.
+fn bulge(s: &[u8], i: i64, i1: i64, j: i64, j1: i64, temp: f64, emap: &Energies) -> f64 {
+    let loop_len = (i1 - i - 1).max(j - j1 - 1);
+    if loop_len <= 0 {
+        panic!("bulge: non-positive loop");
+    }
+
+    let mut d_gv = if let Some(&(d_h, d_s)) = emap.bulge_loops.get(&loop_len) {
+        d_g(d_h, d_s, temp)
+    } else {
+        let (d_h, d_s) = emap.bulge_loops[&30];
+        let g = d_g(d_h, d_s, temp);
+        j_s(loop_len, 30, g, temp)
+    };
+
+    if loop_len == 1 {
+        let p = pair_str(s, i, i1, j, j1);
+        assert!(emap.nn.contains_key(&p));
+        d_gv += stack_e(s, i, i1, j, j1, temp, emap);
+    }
+
+    if [i, i1, j, j1].iter().any(|&k| s[k as usize] == b'A') {
+        d_gv += 0.5;
+    }
+
+    d_gv
+}
+
+/// Free energy of an internal loop.
+fn internal_loop(s: &[u8], i: i64, i1: i64, j: i64, j1: i64, temp: f64, emap: &Energies) -> f64 {
+    let loop_left = i1 - i - 1;
+    let loop_right = j - j1 - 1;
+    let loop_len = loop_left + loop_right;
+
+    if loop_left < 1 || loop_right < 1 {
+        panic!("internal_loop: bad loop");
+    }
+
+    if loop_left == 1 && loop_right == 1 {
+        let mm_left = stack_e(s, i, i1, j, j1, temp, emap);
+        let mm_right = stack_e(s, i1 - 1, i1, j1 + 1, j1, temp, emap);
+        return mm_left + mm_right;
+    }
+
+    let mut d_gv = if let Some(&(d_h, d_s)) = emap.internal_loops.get(&loop_len) {
+        d_g(d_h, d_s, temp)
+    } else {
+        let (d_h, d_s) = emap.internal_loops[&30];
+        let g = d_g(d_h, d_s, temp);
+        j_s(loop_len, 30, g, temp)
+    };
+
+    let loop_asymmetry = (loop_left - loop_right).abs();
+    d_gv += 0.3 * loop_asymmetry as f64;
+
+    let pair_left_mm = pair_str(s, i, i + 1, j, j - 1);
+    let (d_h, d_s) = emap.terminal_mm[&pair_left_mm];
+    d_gv += d_g(d_h, d_s, temp);
+
+    let pair_right_mm = pair_str(s, i1 - 1, i1, j1 + 1, j1);
+    let (d_h, d_s) = emap.terminal_mm[&pair_right_mm];
+    d_gv += d_g(d_h, d_s, temp);
+
+    d_gv
+}
+
+/// Recursively gather basepairing branches into `branches`.
+fn add_branch(
+    s: &[u8],
+    st: &Struct,
+    branches: &mut Vec<(i64, i64)>,
+    temp: f64,
+    v_cache: &mut Cache,
+    w_cache: &mut Cache,
+    emap: &Energies,
+) {
+    if !st.truthy() || st.ij.is_empty() {
+        return;
+    }
+    if st.ij.len() == 1 {
+        branches.push(st.ij[0]);
+        return;
+    }
+    let ij = st.ij.clone();
+    for (i1, j1) in ij {
+        let sub = w(s, i1 as usize, j1 as usize, temp, v_cache, w_cache, emap);
+        add_branch(s, &sub, branches, temp, v_cache, w_cache, emap);
+    }
+}
+
+/// Multi-branch energy penalty (linear; Jaeger, Turner & Zuker, 1989).
+fn multi_branch(
+    s: &[u8],
+    i: usize,
+    k: usize,
+    j: usize,
+    temp: f64,
+    v_cache: &mut Cache,
+    w_cache: &mut Cache,
+    emap: &Energies,
+    helix: bool,
+) -> Struct {
+    let (left, right) = if helix {
+        (
+            w(s, i + 1, k, temp, v_cache, w_cache, emap),
+            w(s, k + 1, j - 1, temp, v_cache, w_cache, emap),
+        )
+    } else {
+        (
+            w(s, i, k, temp, v_cache, w_cache, emap),
+            w(s, k + 1, j, temp, v_cache, w_cache, emap),
+        )
+    };
+
+    if !left.truthy() || !right.truthy() {
+        return Struct::null();
+    }
+
+    let mut branches: Vec<(i64, i64)> = Vec::new();
+    add_branch(s, &left, &mut branches, temp, v_cache, w_cache, emap);
+    add_branch(s, &right, &mut branches, temp, v_cache, w_cache, emap);
+
+    // this isn't multi-branched
+    if branches.len() < 2 {
+        return Struct::null();
+    }
+
+    let (ii, jj) = (i as i64, j as i64);
+    if helix {
+        branches.push((ii, jj));
+    }
+
+    let branches_count = branches.len();
+    let blen = branches.len();
+    let mut unpaired: i64 = 0;
+    let mut e_sum = 0.0;
+    for index in 0..blen {
+        let (i2, j2) = branches[index];
+        let (_, j1) = branches[(index + blen - 1) % blen];
+        let (i3, j3) = branches[(index + 1) % blen];
+
+        let mut unpaired_left = 0i64;
+        let mut unpaired_right = 0i64;
+        let mut de = 0.0;
+        if index == blen - 1 && !helix {
+            // pass
+        } else if (i3, j3) == (ii, jj) {
+            unpaired_left = i2 - j1 - 1;
+            unpaired_right = j3 - j2 - 1;
+
+            if unpaired_left != 0 && unpaired_right != 0 {
+                de = stack_e(s, i2 - 1, i2, j2 + 1, j2, temp, emap);
+            } else if unpaired_right != 0 {
+                de = stack_e(s, -1, i2, j2 + 1, j2, temp, emap);
+                if unpaired_right == 1 {
+                    de = stack_e(s, i3, -1, j3, j3 - 1, temp, emap).min(de);
+                }
+            }
+        } else if (i2, j2) == (ii, jj) {
+            unpaired_left = j2 - j1 - 1;
+            unpaired_right = i3 - i2 - 1;
+
+            if unpaired_left != 0 && unpaired_right != 0 {
+                de = stack_e(s, i2 - 1, i2, j2 + 1, j2, temp, emap);
+            } else if unpaired_right != 0 {
+                de = stack_e(s, i2, i2 + 1, j2, -1, temp, emap);
+                if unpaired_right == 1 {
+                    de = stack_e(s, i3 - 1, i3, -1, j3, temp, emap).min(de);
+                }
+            }
+        } else {
+            unpaired_left = i2 - j1 - 1;
+            unpaired_right = i3 - j2 - 1;
+
+            if unpaired_left != 0 && unpaired_right != 0 {
+                de = stack_e(s, i2 - 1, i2, j2 + 1, j2, temp, emap);
+            } else if unpaired_right != 0 {
+                de = stack_e(s, -1, i2, j2 + 1, j2, temp, emap);
+                if unpaired_right == 1 {
+                    de = stack_e(s, i2 - 1, i2, j2 + 1, j2, temp, emap).min(de);
+                }
+            }
+        }
+        let _ = unpaired_left;
+
+        e_sum += de;
+        unpaired += unpaired_right;
+        assert!(unpaired_right >= 0);
+
+        if (i2, j2) != (ii, jj) {
+            e_sum += w(s, i2 as usize, j2 as usize, temp, v_cache, w_cache, emap).e;
+        }
+    }
+
+    assert!(unpaired >= 0);
+
+    let (a, b, c, d) = emap.multibranch;
+    let mut e_multibranch = a + b * branches.len() as f64 + c * unpaired as f64;
+    if unpaired == 0 {
+        e_multibranch = a + d;
+    }
+
+    let e = e_multibranch + e_sum;
+
+    if helix {
+        branches.pop();
+    }
+
+    Struct::new(
+        e,
+        &format!("BIFURCATION:{}n/{}h", unpaired, branches_count),
+        branches,
+    )
+}
+
+/// Traceback through the V and W caches to build the structure list.
+fn traceback(mut i: usize, mut j: usize, v_cache: &Cache, w_cache: &Cache) -> Vec<Struct> {
+    let s_w = w_cache[i][j].clone();
+    if !s_w.desc.contains("HAIRPIN") {
+        while w_cache[i + 1][j] == s_w {
+            i += 1;
+        }
+        while w_cache[i][j - 1] == s_w {
+            j -= 1;
+        }
+    }
+
+    let mut structs: Vec<Struct> = Vec::new();
+    loop {
+        let mut s_v = v_cache[i][j].clone();
+
+        // multibranch structures are only in the w_cache
+        if s_w.ij.len() > 1 {
+            s_v = s_w.clone();
+        }
+
+        structs.push(s_v.with_ij(vec![(i as i64, j as i64)]));
+
+        // it's a multibranch
+        if s_v.ij.len() > 1 {
+            let mut e_sum = 0.0;
+            structs = trackback_energy(&structs);
+            let mut branches: Vec<Struct> = Vec::new();
+            for &(i1, j1) in &s_v.ij {
+                let tb = traceback(i1 as usize, j1 as usize, v_cache, w_cache);
+                if !tb.is_empty() && !tb[0].ij.is_empty() {
+                    let (i2, j2) = tb[0].ij[0];
+                    e_sum += w_cache[i2 as usize][j2 as usize].e;
+                    branches.extend(tb);
+                }
+            }
+
+            let last = structs.last().unwrap().clone();
+            let n = structs.len();
+            structs[n - 1] = Struct::new(pyround(last.e - e_sum, 1), &last.desc, last.ij.clone());
+            structs.extend(branches);
+            return structs;
+        }
+
+        // it's a stack, bulge, etc -- another single structure beyond this
+        if s_v.ij.len() == 1 {
+            let (ni, nj) = s_v.ij[0];
+            i = ni as usize;
+            j = nj as usize;
+            continue;
+        }
+
+        // it's a hairpin, end of structure
+        return trackback_energy(&structs);
+    }
+}
+
+/// Add energy to each structure based on how its W(i,j) differs from the next.
+fn trackback_energy(structs: &[Struct]) -> Vec<Struct> {
+    let len = structs.len();
+    let mut out: Vec<Struct> = Vec::with_capacity(len);
+    for (index, st) in structs.iter().enumerate() {
+        let e_next = if index == len - 1 {
+            0.0
+        } else {
+            structs[index + 1].e
+        };
+        let e_corrected = pyround(st.e - e_next, 1);
+        out.push(Struct::new(e_corrected, &st.desc, st.ij.clone()));
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::energies;
+
+    fn caches(n: usize) -> (Cache, Cache) {
+        (
+            vec![vec![Struct::default_(); n]; n],
+            vec![vec![Struct::default_(); n]; n],
+        )
+    }
+
+    #[test]
+    fn test_pair() {
+        let seq = b"ATGGAATAGTG";
+        assert_eq!(pair_str(seq, 0, 1, 9, 10), "AT/TG");
+    }
+
+    #[test]
+    fn test_stack() {
+        let seq = b"GCUCAGCUGGGAGAGC";
+        let temp = 310.15;
+        let e = stack_e(seq, 1, 2, 14, 13, temp, energies::rna());
+        assert!((e - -2.1).abs() <= 0.1, "got {}", e);
+    }
+
+    #[test]
+    fn test_bulge() {
+        let seq = b"ACCCCCATCCTTCCTTGAGTCAAGGGGCTCAA";
+        let e = bulge(seq, 5, 7, 18, 17, 310.15, energies::dna());
+        assert!((3.22 - e).abs() <= 0.4, "got {}", e);
+    }
+
+    #[test]
+    fn test_hairpin() {
+        let temp = 310.15;
+        let e = hairpin(b"ACCCCCTCCTTCCTTGGATCAAGGGGCTCAA", 11, 16, temp, energies::dna());
+        assert!((e - 4.3).abs() <= 1.0, "got {}", e);
+
+        let e = hairpin(
+            b"ACCCGCAAGCCCTCCTTCCTTGGATCAAGGGGCTCAA",
+            3,
+            8,
+            temp,
+            energies::dna(),
+        );
+        assert!((0.67 - e).abs() <= 0.1, "got {}", e);
+
+        let e = hairpin(b"CUUUGCACG", 0, 8, temp, energies::rna());
+        assert!((4.5 - e).abs() <= 0.2, "got {}", e);
+    }
+
+    #[test]
+    fn test_internal_loop() {
+        let seq = b"ACCCCCTCCTTCCTTGGATCAAGGGGCTCAA";
+        let (i, j) = (6i64, 21i64);
+        let e = internal_loop(seq, i, i + 4, j, j - 4, 310.15, energies::dna());
+        assert!((e - 3.5).abs() <= 0.1, "got {}", e);
+    }
+
+    #[test]
+    fn test_w() {
+        let cases: &[(&[u8], usize, &Energies)] = &[
+            (b"GCUCAGCUGGGAGAGC", 15, energies::rna()),
+            (b"CCUGCUUUGCACGCAGG", 16, energies::rna()),
+            (b"GCGGUUCGAUCCCGC", 14, energies::rna()),
+        ];
+        let expected = [-3.8, -6.4, -4.2];
+        for (idx, (seq, j, emap)) in cases.iter().enumerate() {
+            let (mut vc, mut wc) = caches(seq.len());
+            let st = w(seq, 0, *j, 310.15, &mut vc, &mut wc, emap);
+            assert!(
+                (st.e - expected[idx]).abs() <= 0.2,
+                "case {}: got {}",
+                idx,
+                st.e
+            );
+        }
+    }
+}
