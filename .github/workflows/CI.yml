@@ -65,7 +65,9 @@ jobs:
         uses: uraimo/run-on-arch-action@v2
         with:
           arch: ${{ matrix.platform.target }}
-          distro: ubuntu24.04
+          # run-on-arch-action@v2 ships no ubuntu24.04 image; ubuntu22.04 has
+          # the aarch64 image needed to run the emulated test step.
+          distro: ubuntu22.04
           githubToken: ${{ github.token }}
           install: |
             apt-get update
