@@ -8,12 +8,22 @@
 use std::collections::HashSet;
 
 use rayon::prelude::*;
+use smallvec::{smallvec, SmallVec};
 
 use super::energies::{self, Energies};
 use super::pyfloat::pyround;
 
 const INF: f64 = f64::INFINITY;
 const NEG_INF: f64 = f64::NEG_INFINITY;
+
+/// The basepairs of a structure, stored in 32-bit (sequences are short) and
+/// inline for the common 0-1 element case. Multi-branch structures (>1 pair)
+/// spill to the heap.
+type Ij = SmallVec<[(i32, i32); 1]>;
+
+/// A working list of branches inside `mb`; inline for up to 4 branches (the
+/// typical multi-branch fan-out), arithmetic kept in `i64`.
+type Branches = SmallVec<[(i64, i64); 4]>;
 
 /// Sequences at least this long fill each anti-diagonal in parallel; shorter
 /// ones run sequentially (thread overhead outweighs the work).
@@ -34,7 +44,7 @@ enum Desc {
     /// (i, j) and the inner pair (ij[0]) at render time.
     Pair,
     /// A multi-branch structure; carries the counts the label needs.
-    Bifurcation { unpaired: i64, count: usize },
+    Bifurcation { unpaired: i32, count: u32 },
 }
 
 /// A single structure with a free energy, description, and inward children.
@@ -43,7 +53,7 @@ pub struct Struct {
     pub e: f64,
     /// Rendered label. Empty for cache cells; filled in for traceback output.
     pub desc: String,
-    pub ij: Vec<(i64, i64)>,
+    pub ij: Ij,
     /// Compact descriptor used during the fill (cache cells only).
     tag: Desc,
 }
@@ -57,7 +67,7 @@ impl PartialEq for Struct {
 
 impl Struct {
     /// Construct an output structure with an already-rendered label.
-    pub fn new(e: f64, desc: &str, ij: Vec<(i64, i64)>) -> Struct {
+    pub fn new(e: f64, desc: &str, ij: Ij) -> Struct {
         Struct {
             e,
             desc: desc.to_string(),
@@ -67,7 +77,7 @@ impl Struct {
     }
 
     /// Construct a cache cell carrying a compact tag (no label allocation).
-    fn tagged(e: f64, tag: Desc, ij: Vec<(i64, i64)>) -> Struct {
+    fn tagged(e: f64, tag: Desc, ij: Ij) -> Struct {
         Struct {
             e,
             desc: String::new(),
@@ -78,12 +88,12 @@ impl Struct {
 
     /// The `STRUCT_DEFAULT` sentinel: `Struct(-inf)` with an empty `ij`.
     pub fn default_() -> Struct {
-        Struct::tagged(NEG_INF, Desc::None, Vec::new())
+        Struct::tagged(NEG_INF, Desc::None, SmallVec::new())
     }
 
     /// The `STRUCT_NULL` sentinel: `Struct(inf)` with an empty `ij`.
     pub fn null() -> Struct {
-        Struct::tagged(INF, Desc::None, Vec::new())
+        Struct::tagged(INF, Desc::None, SmallVec::new())
     }
 
     /// Python `__bool__`: false when the energy is +/- infinity.
@@ -93,7 +103,7 @@ impl Struct {
 }
 
 /// Reconstruct the human-readable label for a structure at cell (i, j).
-fn render_desc(tag: &Desc, s: &[u8], i: usize, j: usize, inner: Option<(i64, i64)>, n: usize) -> String {
+fn render_desc(tag: &Desc, s: &[u8], i: usize, j: usize, inner: Option<(i32, i32)>, n: usize) -> String {
     match tag {
         Desc::None => String::new(),
         Desc::Hairpin => format!(
@@ -108,7 +118,7 @@ fn render_desc(tag: &Desc, s: &[u8], i: usize, j: usize, inner: Option<(i64, i64
             let (i1, j1) = (i1i as usize, j1i as usize);
             if i1 == i + 1 && j1 == j - 1 {
                 // stacking pair (possibly with a dangling end)
-                let pair = pair_str(s, i as i64, i1i, j as i64, j1i);
+                let pair = pair_str(s, i as i64, i1i as i64, j as i64, j1i as i64);
                 if (i > 0 && j == n - 1) || (i == 0 && j < n - 1) {
                     format!("STACK_DE:{}", pair)
                 } else {
@@ -340,11 +350,11 @@ fn compute_v(
     let isolated_inner = comp(emap, s[i + 1]) != s[j - 1];
 
     if isolated_outer && isolated_inner {
-        return Struct::tagged(1600.0, Desc::None, Vec::new());
+        return Struct::tagged(1600.0, Desc::None, SmallVec::new());
     }
 
     // E1 = FH(i, j); hairpin. The label is reconstructed at traceback time.
-    let e1 = Struct::tagged(hairpin(s, i, j, temp, emap), Desc::Hairpin, Vec::new());
+    let e1 = Struct::tagged(hairpin(s, i, j, temp, emap), Desc::Hairpin, SmallVec::new());
     if j - i == 4 {
         return e1;
     }
@@ -354,7 +364,7 @@ fn compute_v(
     // Only the energy and the winning inner pair are tracked; the exact label
     // (STACK / BULGE / INTERIOR_LOOP / ...) is reconstructed from those indices
     // at traceback time, so no strings are built during the search.
-    let mut e2 = Struct::tagged(INF, Desc::None, Vec::new());
+    let mut e2 = Struct::tagged(INF, Desc::None, SmallVec::new());
     let mut best: Option<(f64, usize, usize)> = None;
     if j >= 4 {
         let pair_inner_left =
@@ -398,7 +408,7 @@ fn compute_v(
         }
 
         if let Some((e2_test, i1, j1)) = best {
-            e2 = Struct::tagged(e2_test, Desc::Pair, vec![(i1 as i64, j1 as i64)]);
+            e2 = Struct::tagged(e2_test, Desc::Pair, smallvec![(i1 as i32, j1 as i32)]);
         }
     }
 
@@ -607,12 +617,13 @@ fn internal_loop(s: &[u8], i: i64, i1: i64, j: i64, j1: i64, temp: f64, emap: &E
 
 /// Recursively gather basepairing branches into `branches` (reads only the
 /// already-finalized W cache).
-fn add_branch(st: &Struct, branches: &mut Vec<(i64, i64)>, w_cache: &Cache) {
+fn add_branch(st: &Struct, branches: &mut Branches, w_cache: &Cache) {
     if !st.truthy() || st.ij.is_empty() {
         return;
     }
     if st.ij.len() == 1 {
-        branches.push(st.ij[0]);
+        let (a, b) = st.ij[0];
+        branches.push((a as i64, b as i64));
         return;
     }
     let ij = st.ij.clone();
@@ -647,7 +658,7 @@ fn mb(
         return Struct::null();
     }
 
-    let mut branches: Vec<(i64, i64)> = Vec::new();
+    let mut branches: Branches = SmallVec::new();
     add_branch(&left, &mut branches, w_cache);
     add_branch(&right, &mut branches, w_cache);
 
@@ -737,13 +748,14 @@ fn mb(
         branches.pop();
     }
 
+    let ij: Ij = branches.iter().map(|&(a, b)| (a as i32, b as i32)).collect();
     Struct::tagged(
         e,
         Desc::Bifurcation {
-            unpaired,
-            count: branches_count,
+            unpaired: unpaired as i32,
+            count: branches_count as u32,
         },
-        branches,
+        ij,
     )
 }
 
@@ -771,7 +783,7 @@ fn traceback(s: &[u8], mut i: usize, mut j: usize, v_cache: &Cache, w_cache: &Ca
 
         // render the label now, while both (i, j) and the inner pair are known
         let desc = render_desc(&s_v.tag, s, i, j, s_v.ij.first().copied(), n);
-        structs.push(Struct::new(s_v.e, &desc, vec![(i as i64, j as i64)]));
+        structs.push(Struct::new(s_v.e, &desc, smallvec![(i as i32, j as i32)]));
 
         // it's a multibranch
         if s_v.ij.len() > 1 {

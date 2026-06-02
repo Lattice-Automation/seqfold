@@ -25,7 +25,8 @@ impl Struct {
         Struct {
             e: s.e,
             desc: s.desc,
-            ij: s.ij,
+            // core stores 32-bit indices; Python exposes ints (i64 tuples)
+            ij: s.ij.iter().map(|&(a, b)| (a as i64, b as i64)).collect(),
         }
     }
 }

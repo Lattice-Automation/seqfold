@@ -21,6 +21,9 @@ python = ["dep:pyo3"]
 pyo3 = { version = "0.22", features = ["extension-module", "abi3-py38"], optional = true }
 # Data-parallel fill of the DP matrix (one task per cell on each anti-diagonal).
 rayon = "1.10"
+# Inline storage for the small per-cell basepair lists (no heap alloc for the
+# common 0-1 element case).
+smallvec = "1"
 
 [profile.release]
 lto = true
