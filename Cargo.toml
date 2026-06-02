@@ -3,7 +3,7 @@ name = "seqfold"
 # Dev default only. Releases take the version from the GitHub Release tag, which
 # the CI injects here before building (see DEVELOPMENT.md). pyproject.toml reads
 # this via `dynamic = ["version"]`.
-version = "0.10.0"
+version = "0.10.1"
 edition = "2021"
 description = "Predict the minimum free energy structure of nucleic acids"
 license = "MIT"

@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.8"
+          python-version: "3.13"
       - name: Set version from release tag
         if: github.event_name == 'release'
         shell: bash
@@ -74,11 +74,10 @@ jobs:
           pytest
       - name: pytest
         if: ${{ !startsWith(matrix.platform.target, 'x86') && matrix.platform.target != 'ppc64' }}
-        uses: uraimo/run-on-arch-action@v2
+        uses: uraimo/run-on-arch-action@v3
         with:
           arch: ${{ matrix.platform.target }}
-          # run-on-arch-action@v2 ships no ubuntu24.04 image; ubuntu22.04 has
-          # the aarch64 image needed to run the emulated test step.
+          # ubuntu22.04 provides the aarch64 image used to run the emulated tests.
           distro: ubuntu22.04
           githubToken: ${{ github.token }}
           install: |
@@ -107,7 +106,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.8"
+          python-version: "3.13"
       - name: Set version from release tag
         if: github.event_name == 'release'
         shell: bash
@@ -143,7 +142,7 @@ jobs:
           '
       - name: pytest
         if: ${{ !startsWith(matrix.platform.target, 'x86') }}
-        uses: uraimo/run-on-arch-action@v2
+        uses: uraimo/run-on-arch-action@v3
         with:
           arch: ${{ matrix.platform.target }}
           distro: alpine_latest
@@ -167,7 +166,7 @@ jobs:
         # 32-bit CPython 3.13, and it's a legacy target with ~no users. Those
         # install from the sdist.
         platform:
-          - runner: windows-latest
+          - runner: windows-2025
             target: x64
             python_arch: x64
           - runner: windows-11-arm
@@ -224,7 +223,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.8"
+          python-version: "3.13"
       - name: Set version from release tag
         if: github.event_name == 'release'
         shell: bash
