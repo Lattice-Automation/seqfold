@@ -10,15 +10,6 @@ The folding/Tm engine is written in **Rust** and exposed to Python through [PyO3
 
 ## Installation
 
-### pypy3 (recommended)
-
-```bash
-pypy3 -m ensurepip
-pypy3 -m pip install seqfold
-```
-
-For a 200bp sequence (on my laptop), [pypy3](https://doc.pypy.org/en/latest/index.html) takes 2.5 seconds versus 15 seconds for CPython.
-
 ### Conda
 
 ```bash
