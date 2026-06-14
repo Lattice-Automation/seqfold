@@ -910,4 +910,27 @@ mod tests {
             );
         }
     }
+
+    /// Exhaustively fold every DNA sequence up to a small length and assert
+    /// nothing panics. Guards against regressions like the out-of-bounds
+    /// traceback on short/unfoldable sequences (issue #31).
+    #[test]
+    fn test_fuzz_no_panic() {
+        const ALPHABET: &[u8] = b"ACGT";
+        for len in 0..=8usize {
+            for mut code in 0..ALPHABET.len().pow(len as u32) {
+                let mut seq = String::with_capacity(len);
+                for _ in 0..len {
+                    seq.push(ALPHABET[code % ALPHABET.len()] as char);
+                    code /= ALPHABET.len();
+                }
+                let g = dg(&seq, 37.0).expect("dg should not error");
+                // sequences too short to form a hairpin are undefined (-inf),
+                // matching seqfold 0.9.0
+                if (1..5).contains(&len) {
+                    assert!(g.is_infinite() && g < 0.0, "{:?} -> {}", seq, g);
+                }
+            }
+        }
+    }
 }
