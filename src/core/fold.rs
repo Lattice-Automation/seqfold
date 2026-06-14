@@ -175,6 +175,9 @@ pub fn fold(seq: &str, temp: f64) -> Result<Vec<Struct>, FoldError> {
     // traceback renders labels from the (upper-cased) sequence, matching cache()
     let upper = seq.to_uppercase();
     let s = upper.as_bytes();
+    if s.is_empty() {
+        return Ok(Vec::new());
+    }
     Ok(traceback(s, 0, s.len() - 1, &v_cache, &w_cache))
 }
 
@@ -764,10 +767,10 @@ fn traceback(s: &[u8], mut i: usize, mut j: usize, v_cache: &Cache, w_cache: &Ca
     let n = s.len();
     let s_w = w_cache[i][j].clone();
     if s_w.tag != Desc::Hairpin {
-        while w_cache[i + 1][j] == s_w {
+        while i + 1 < n && w_cache[i + 1][j] == s_w {
             i += 1;
         }
-        while w_cache[i][j - 1] == s_w {
+        while j > 0 && w_cache[i][j - 1] == s_w {
             j -= 1;
         }
     }
