@@ -225,21 +225,19 @@ fn calc_tm(dh: f64, ds: f64, pcr: bool, gc: f64, seq_len: usize) -> f64 {
             + ((ka * dntps - ka * mg + 1.0).powi(2) + 4.0 * ka * mg).sqrt())
             / (2.0 * ka);
     }
-    if Mon > 0.0 {
-        let r = mg.sqrt() / mon;
-        if r < 0.22 {
-            return (4.29 * gc / 100.0 - 3.95) * 1e-5 * mon.ln() + 9.4e-6 * mon.ln().powi(2);
-        } else if r < 6.0 {
+    let corr = if Mon > 0.0 && mg.sqrt() / mon < 0.22 {
+        (4.29 * gc - 3.95) * 1e-5 * mon.ln() + 9.4e-6 * mon.ln().powi(2)
+    } else {
+        if Mon > 0.0 && mg.sqrt() / mon < 6.0 {
             a = 3.92 * (0.843 - 0.352 * mon.sqrt() * mon.ln());
             d = 1.42 * (1.279 - 4.03e-3 * mon.ln() - 8.03e-3 * mon.ln().powi(2));
             g = 8.31 * (0.486 - 0.258 * mon.ln() + 5.25e-3 * mon.ln().powi(3));
         }
-    }
-    let corr = (a
-        + b * mg.ln()
-        + (gc / 100.0) * (c + d * mg.ln())
-        + (1.0 / (2.0 * (seq_len as f64 - 1.0))) * (e + f * mg.ln() + g * mg.ln().powi(2)))
-        * 1e-5;
+        (a + b * mg.ln()
+            + gc * (c + d * mg.ln())
+            + (1.0 / (2.0 * (seq_len as f64 - 1.0))) * (e + f * mg.ln() + g * mg.ln().powi(2)))
+            * 1e-5
+    };
 
     // tm with concentration consideration
     let k = (seq1_conc - (seq2_conc / 2.0)) * 1e-9;
@@ -274,6 +272,37 @@ mod tests {
         for (seq, actual) in cases {
             let calc = tm(seq, "", true).unwrap();
             assert!((calc - actual).abs() <= 7.0, "{}: got {}", seq, calc);
+        }
+    }
+
+    #[test]
+    fn test_calc_tm_non_pcr() {
+        // Regression test for https://github.com/Lattice-Automation/seqfold/issues/25:
+        // the monovalent-salt branch returned the raw correction term (~0.0002)
+        // instead of a Tm.
+        let cases = [
+            ("GGGACCGCCT", 51.9),
+            ("CCATTGCTACC", 42.7),
+            ("GCAGTGGATGTGAGA", 55.1),
+            ("CTGGTCTGGATCTGAGAACTTCAGG", 67.7),
+            ("CTTAAGATATGAGAACTTCAACTAATGTGT", 59.7),
+            ("AGTCTGGTCTGGATCTGAGAACTTCAGGCT", 71.6),
+        ];
+        for (seq, _) in cases {
+            let calc = tm(seq, "", false).unwrap();
+            assert!(
+                calc > 0.0 && calc < 100.0,
+                "{}: non-pcr Tm out of range: {}",
+                seq,
+                calc
+            );
+            // 25 nM strands in monovalent salt melt below the PCR preset
+            assert!(
+                tm(seq, "", true).unwrap() > calc,
+                "{}: non-pcr {} >= pcr Tm",
+                seq,
+                calc
+            );
         }
     }
 }

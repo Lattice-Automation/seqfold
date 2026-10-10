@@ -36,9 +36,22 @@ class TestTm(unittest.TestCase):
         cache = tm_cache(seq)
 
         self.assertAlmostEqual(cache[0][n - 1], 71.6, delta=3)
-        self.assertLess(cache[3][n - 3], 71.6)
+        self.assertLess(cache[3][n - 3], cache[0][n - 1])
         self.assertEqual(float("inf"), cache[5][5], "inf for invalid subsequences")
         self.assertEqual(float("inf"), cache[5][1], "inf for invalid subsequences")
+
+    def test_tm_non_pcr(self):
+        """Non-PCR salt conditions return a Tm, not the salt correction.
+
+        Regression test for https://github.com/Lattice-Automation/seqfold/issues/25
+        where `tm(..., pcr=False)` returned the raw correction term (~0.0002).
+        """
+
+        seq = "ACGAGCGAGCGGAGCGGGCG"
+        non_pcr = tm(seq, pcr=False)
+        self.assertGreater(non_pcr, 0)
+        # 250 nM oligo with Mg melts higher than 25 nM oligo in Na alone
+        self.assertGreater(tm(seq, pcr=True), non_pcr)
 
     def test_gc_cache(self):
         """Create a cache of GC ratios from i to j."""
